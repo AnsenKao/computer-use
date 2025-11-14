@@ -126,10 +126,7 @@ KEY_MAPPING = {
     "tab": "Tab", "win": "Meta", "cmd": "Meta", "super": "Meta", "option": "Alt"
 }
 
-# Request/Response models (kept for backward compatibility with HTTP API)
-class NavigateRequest(BaseModel):
-    url: str
-
+# Request/Response models
 class AITaskRequest(BaseModel):
     task: str
     max_iterations: Optional[int] = MAX_AI_ITERATIONS
@@ -634,6 +631,30 @@ async def websocket_screenshot(websocket: WebSocket):
                             "type": "ai_status",
                             "status": "stopped"
                         })
+                
+                # Handle navigation commands
+                elif message_type == "navigate":
+                    url = message.get("url", "")
+                    if url:
+                        try:
+                            await page.goto(url, wait_until="domcontentloaded", timeout=10000)
+                            print(f"🌐 Navigated to: {url}")
+                        except Exception as e:
+                            print(f"❌ Navigation error: {e}")
+                
+                elif message_type == "back":
+                    try:
+                        await page.go_back(wait_until="domcontentloaded", timeout=5000)
+                        print("◀ Go back")
+                    except Exception as e:
+                        print(f"❌ Back navigation error: {e}")
+                
+                elif message_type == "forward":
+                    try:
+                        await page.go_forward(wait_until="domcontentloaded", timeout=5000)
+                        print("▶ Go forward")
+                    except Exception as e:
+                        print(f"❌ Forward navigation error: {e}")
                     
             except WebSocketDisconnect:
                 break
@@ -659,29 +680,6 @@ async def get_state():
         "history_length": len(state["history"]),
         "current_url": page.url if page else None
     }
-
-
-@app.post("/goto")
-async def navigate(request: NavigateRequest):
-    """Navigate to a URL."""
-    try:
-        await page.goto(request.url, wait_until="domcontentloaded", timeout=10000)
-        state["history"].append({
-            "type": "navigate",
-            "url": request.url,
-            "timestamp": time.time(),
-            "mode": state["mode"]
-        })
-        return {
-            "status": "ok",
-            "url": page.url,
-            "title": await page.title()
-        }
-    except Exception as e:
-        return {
-            "status": "error",
-            "message": str(e)
-        }
 
 
 @app.post("/ai/start")

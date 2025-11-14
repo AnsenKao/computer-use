@@ -240,6 +240,77 @@
         #ai-panel.minimized {
             max-height: 50px;
         }
+        
+        /* URL Control Panel */
+        #url-control {
+            position: fixed;
+            top: 50px;
+            left: 10px;
+            background: rgba(0, 0, 0, 0.8);
+            backdrop-filter: blur(10px);
+            padding: 8px;
+            border-radius: 8px;
+            display: flex;
+            gap: 6px;
+            align-items: center;
+            z-index: 1000;
+            max-width: 600px;
+        }
+        
+        #url-control button {
+            background: rgba(59, 130, 246, 0.8);
+            border: none;
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: white;
+            font-size: 14px;
+            cursor: pointer;
+            transition: background 0.2s;
+            min-width: 36px;
+        }
+        
+        #url-control button:hover:not(:disabled) {
+            background: rgba(59, 130, 246, 1);
+        }
+        
+        #url-control button:disabled {
+            background: rgba(100, 100, 100, 0.5);
+            cursor: not-allowed;
+            opacity: 0.5;
+        }
+        
+        #btn-back, #btn-forward {
+            font-weight: bold;
+        }
+        
+        #url-input {
+            flex: 1;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 6px;
+            padding: 8px 12px;
+            color: white;
+            font-size: 13px;
+            outline: none;
+            min-width: 300px;
+        }
+        
+        #url-input::placeholder {
+            color: rgba(255, 255, 255, 0.4);
+        }
+        
+        #url-input:focus {
+            border-color: rgba(59, 130, 246, 0.5);
+            background: rgba(255, 255, 255, 0.15);
+        }
+        
+        #btn-go {
+            background: rgba(34, 197, 94, 0.8);
+        }
+        
+        #btn-go:hover {
+            background: rgba(34, 197, 94, 1);
+        }
     </style>
 </head>
 <body>
@@ -247,6 +318,13 @@
     <div id="url-info">🌐 等待連接...</div>
     <div id="status" class="disconnected">🔴 未連接</div>
     <div id="mode-indicator">👤 人類控制</div>
+    
+    <!-- URL Control Panel -->
+    <div id="url-control">
+        <button id="btn-back" title="上一頁">◀</button>
+        <button id="btn-forward" title="下一頁">▶</button>
+        <input type="text" id="url-input" placeholder="輸入網址後按 Enter (例如: https://www.google.com)" />
+    </div>
     
     <!-- AI Chat Panel -->
     <div id="ai-panel">
@@ -274,11 +352,15 @@
         const aiSend = document.getElementById('ai-send');
         const aiStop = document.getElementById('ai-stop');
         const aiToggle = document.getElementById('ai-toggle');
+        const urlInput = document.getElementById('url-input');
+        const btnBack = document.getElementById('btn-back');
+        const btnForward = document.getElementById('btn-forward');
         
         let ws = null;
         let currentUrl = '';
         let currentMode = 'idle';
         let aiRunning = false;
+        let isEditingUrl = false;
         
         // 連接 WebSocket
         function connect() {
@@ -350,6 +432,10 @@
                 if (data.url) {
                     currentUrl = data.url;
                     urlEl.textContent = `🌐 ${data.url}`;
+                    // 只在用戶沒有編輯時更新 URL 輸入框
+                    if (!isEditingUrl) {
+                        urlInput.value = data.url;
+                    }
                 }
                 
                 currentMode = data.mode;
@@ -467,7 +553,7 @@
         // 鍵盤事件
         document.addEventListener('keydown', (e) => {
             // 如果焦點在輸入框，不攔截
-            if (document.activeElement === aiInput) return;
+            if (document.activeElement === aiInput || document.activeElement === urlInput) return;
             
             // 允許 F5 和 F12
             if (e.key === 'F5' || e.key === 'F12') return;
@@ -508,6 +594,51 @@
             aiPanel.classList.toggle('minimized');
             aiToggle.textContent = aiPanel.classList.contains('minimized') ? '+' : '−';
         });
+        
+        // URL 控制功能
+        function navigateToUrl() {
+            const url = urlInput.value.trim();
+            if (!url || !ws || ws.readyState !== WebSocket.OPEN) return;
+            
+            // 自動添加 https:// 如果沒有協議
+            let fullUrl = url;
+            if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                fullUrl = 'https://' + url;
+            }
+            
+            ws.send(JSON.stringify({
+                type: 'navigate',
+                url: fullUrl
+            }));
+            
+            // 移除焦點
+            urlInput.blur();
+        }
+        
+        function goBack() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            ws.send(JSON.stringify({ type: 'back' }));
+        }
+        
+        function goForward() {
+            if (!ws || ws.readyState !== WebSocket.OPEN) return;
+            ws.send(JSON.stringify({ type: 'forward' }));
+        }
+        
+        // 追蹤 URL 輸入框編輯狀態
+        urlInput.addEventListener('focus', () => {
+            isEditingUrl = true;
+        });
+        urlInput.addEventListener('blur', () => {
+            isEditingUrl = false;
+        });
+        urlInput.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                navigateToUrl();
+            }
+        });
+        btnBack.addEventListener('click', goBack);
+        btnForward.addEventListener('click', goForward);
         
         // 啟動連接
         connect();
