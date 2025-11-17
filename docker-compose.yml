@@ -1,0 +1,51 @@
+services:
+  computer-use:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: ai-computer-use
+    ports:
+      - "8000:8000"
+      # - "5900:5900"  # VNC port (可選，用於查看瀏覽器畫面)
+    environment:
+      # Azure AI 配置
+      - AZURE_API_KEY=${AZURE_API_KEY:-your-azure-api-key-here}
+      - AZURE_ENDPOINT=https://abscgpt01.cognitiveservices.azure.com/openai/v1/
+      - MODEL_DEPLOYMENT=computer-use-preview
+      
+      # 顯示配置
+      - DISPLAY=:99
+      - SCREEN_WIDTH=1920
+      - SCREEN_HEIGHT=1080
+      - SCREEN_DEPTH=24
+      
+    # 共享記憶體大小 (Chromium 需要)
+    shm_size: '2gb'
+    
+    # 重啟策略
+    restart: unless-stopped
+    
+    # 資源限制 (可選)
+    deploy:
+      resources:
+        limits:
+          cpus: '2'
+          memory: 4G
+        reservations:
+          cpus: '1'
+          memory: 2G
+    
+    # 健康檢查
+    healthcheck:
+      test: ["CMD", "python", "-c", "import requests; requests.get('http://localhost:8000/api/status')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    
+    # 日誌配置
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

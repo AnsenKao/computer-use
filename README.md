@@ -8,12 +8,92 @@
 ✅ **WebSocket 串流** - 30 FPS 高品質截圖串流  
 ✅ **單一服務** - 只需運行一個 FastAPI 服務  
 ✅ **純 HTML 前端** - 無需框架，簡單高效  
+✅ **Docker 支援** - 一鍵部署，包含完整瀏覽器環境  
 
 ---
 
 ## 🚀 快速開始
 
-### 1. 啟動服務
+### 方式一：Docker 部署 (推薦)
+
+這是最簡單的方式，包含完整的瀏覽器環境。
+
+#### 1. 設定環境變數
+
+```bash
+# 複製環境變數範本
+cp .env.example .env
+
+# 編輯 .env 檔案，填入你的 Azure API Key
+nano .env  # 或使用其他編輯器
+```
+
+#### 2. 構建 Docker 映像
+
+```bash
+./build.sh
+```
+
+#### 3. 啟動服務
+
+```bash
+# 方式 A：使用 Docker Compose (推薦)
+docker-compose up -d
+
+# 方式 B：使用啟動腳本
+./run.sh
+
+# 方式 C：手動運行
+docker run -d \
+  --name ai-computer-use \
+  -p 8000:8000 \
+  --shm-size=2g \
+  -e AZURE_API_KEY=your-key-here \
+  ai-computer-use:latest
+```
+
+#### 4. 查看日誌
+
+```bash
+# Docker Compose
+docker-compose logs -f
+
+# Docker 直接運行
+docker logs -f ai-computer-use
+```
+
+#### 5. 停止服務
+
+```bash
+# Docker Compose
+docker-compose down
+
+# Docker 直接運行
+docker stop ai-computer-use
+docker rm ai-computer-use
+```
+
+### 方式二：本地開發
+
+適合開發和測試。
+
+#### 1. 安裝依賴
+
+```bash
+# 安裝 Python 套件
+pip install -r requirements.txt
+
+# 安裝 Playwright 瀏覽器
+playwright install chromium
+```
+
+#### 2. 設定環境變數
+
+```bash
+export AZURE_API_KEY=your-azure-api-key-here
+```
+
+#### 3. 啟動服務
 
 ```bash
 # 方式一：使用啟動腳本
@@ -23,9 +103,45 @@
 python computer_use_backend.py
 ```
 
-### 2. 打開瀏覽器
+#### 4. 打開瀏覽器
 
 訪問：**http://localhost:8000**
+
+---
+
+## 🐳 Docker 詳細說明
+
+### 映像特點
+
+- **基於 Python 3.11**
+- **包含 Chromium 瀏覽器** - 完整的 Playwright Chromium 安裝
+- **虛擬顯示器** - 使用 Xvfb 提供 X11 顯示環境
+- **視窗管理器** - 使用 Fluxbox 輕量級視窗管理器
+- **PyAutoGUI 支援** - 完整的 GUI 自動化功能
+- **健康檢查** - 自動監控服務狀態
+
+### 環境變數
+
+| 變數 | 說明 | 預設值 |
+|------|------|--------|
+| `AZURE_API_KEY` | Azure OpenAI API Key | (必填) |
+| `AZURE_ENDPOINT` | Azure OpenAI 端點 | `https://abscgpt01...` |
+| `MODEL_DEPLOYMENT` | 模型部署名稱 | `computer-use-preview` |
+| `SCREEN_WIDTH` | 虛擬螢幕寬度 | `1920` |
+| `SCREEN_HEIGHT` | 虛擬螢幕高度 | `1080` |
+| `SCREEN_DEPTH` | 色彩深度 | `24` |
+
+### 資源需求
+
+- **CPU**: 建議 2 核心以上
+- **記憶體**: 建議 4GB 以上
+- **磁碟空間**: 約 2GB (映像大小)
+- **共享記憶體**: 2GB (Chromium 需要)
+
+### 埠號
+
+- `8000` - FastAPI Web 服務
+- `5900` - VNC 埠 (可選，用於遠端查看瀏覽器畫面)
 
 ---
 
@@ -48,6 +164,135 @@ python computer_use_backend.py
 4. 點擊「停止」可隨時中斷
 
 ### AI 指令範例
+
+```
+在 Google 搜尋 "FastAPI 教學"
+打開 GitHub 並搜尋 "computer use"
+填寫這個表單並送出
+幫我在這個網站上找到聯絡資訊
+```
+
+---
+
+## 📡 API 端點
+
+### REST API
+
+- `GET /` - 前端頁面
+- `GET /api/status` - 服務狀態
+- `GET /screenshot` - 獲取當前截圖
+- `GET /state` - 獲取系統狀態
+- `POST /ai/start` - 啟動 AI 任務
+- `POST /ai/stop` - 停止 AI 任務
+- `GET /history` - 獲取操作歷史
+- `POST /history/clear` - 清除歷史
+
+### WebSocket
+
+- `ws://localhost:8000/ws/screenshot` - 即時截圖串流和互動
+
+完整 API 文檔：http://localhost:8000/docs
+
+---
+
+## 🔧 進階配置
+
+### 啟用 VNC 遠端查看
+
+如果你想要直接查看 Docker 容器內的瀏覽器畫面：
+
+1. 取消註解 `Dockerfile` 中的 VNC 相關行
+2. 在 `docker-compose.yml` 中暴露 5900 埠
+3. 使用 VNC 客戶端連接 `localhost:5900`
+
+```bash
+# 在 Dockerfile 中取消註解這一行
+# x11vnc -display :99 -forever -nopw -quiet -rfbport 5900 &
+```
+
+### 自訂螢幕解析度
+
+在 `.env` 或 `docker-compose.yml` 中修改：
+
+```env
+SCREEN_WIDTH=2560
+SCREEN_HEIGHT=1440
+```
+
+### 資源限制
+
+在 `docker-compose.yml` 中調整：
+
+```yaml
+deploy:
+  resources:
+    limits:
+      cpus: '4'
+      memory: 8G
+```
+
+---
+
+## 🛠 開發
+
+### 專案結構
+
+```
+computer-use/
+├── computer_use_backend.py   # FastAPI 後端服務
+├── requirements.txt           # Python 依賴
+├── static/
+│   └── index.html            # 前端 HTML
+├── Dockerfile                # Docker 映像定義
+├── docker-compose.yml        # Docker Compose 配置
+├── .dockerignore             # Docker 忽略檔案
+├── .env.example              # 環境變數範本
+├── build.sh                  # 構建腳本
+├── run.sh                    # 運行腳本
+└── README.md                 # 說明文件
+```
+
+### 重新構建映像
+
+```bash
+# 清理舊映像
+docker-compose down
+docker rmi ai-computer-use:latest
+
+# 重新構建
+./build.sh
+
+# 啟動
+docker-compose up -d
+```
+
+---
+
+## ⚠️ 注意事項
+
+1. **Azure API Key** - 請確保已設定有效的 Azure OpenAI API Key
+2. **安全性** - 此服務允許 AI 控制瀏覽器，請在受信任的環境中使用
+3. **資源消耗** - 瀏覽器和 AI 模型會消耗較多資源
+4. **網路存取** - 確保容器可以訪問 Azure OpenAI 端點
+5. **共享記憶體** - Chromium 需要足夠的共享記憶體 (`--shm-size=2g`)
+
+---
+
+## 📄 授權
+
+MIT License
+
+---
+
+## 🤝 貢獻
+
+歡迎提交 Issue 和 Pull Request！
+
+---
+
+## 📞 支援
+
+如有問題，請在 GitHub 上開 Issue。
 
 ```
 搜尋台灣天氣
