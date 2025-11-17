@@ -36,6 +36,7 @@ MODEL_DEPLOYMENT = "computer-use-preview"
 # Display settings - 從環境變數讀取或使用預設值
 DISPLAY_WIDTH = int(os.getenv("SCREEN_WIDTH", "1920"))
 DISPLAY_HEIGHT = int(os.getenv("SCREEN_HEIGHT", "1080"))
+INITIAL_URL = os.getenv("INITIAL_URL", "about:blank")
 MAX_AI_ITERATIONS = 10
 
 # Browser window offset - auto-calibrated at startup
@@ -167,15 +168,19 @@ async def lifespan(app: FastAPI):
     # Initialize Playwright
     playwright = await async_playwright().start()
 
-    # Launch browser in fullscreen (macOS - using system Chrome/Chromium)
+    # Launch browser in fullscreen
     try:
         browser = await playwright.chromium.launch(
             headless=False,
             args=[
                 "--start-fullscreen",
                 "--kiosk",
+                f"--window-size={DISPLAY_WIDTH},{DISPLAY_HEIGHT}",
+                f"--window-position=0,0",
                 "--disable-extensions",
-                "--disable-infobars"
+                "--disable-infobars",
+                "--no-default-browser-check",
+                "--disable-popup-blocking"
             ]
         )
     except Exception as e:
@@ -187,8 +192,12 @@ async def lifespan(app: FastAPI):
             args=[
                 "--start-fullscreen",
                 "--kiosk",
+                f"--window-size={DISPLAY_WIDTH},{DISPLAY_HEIGHT}",
+                f"--window-position=0,0",
                 "--disable-extensions",
-                "--disable-infobars"
+                "--disable-infobars",
+                "--no-default-browser-check",
+                "--disable-popup-blocking"
             ]
         )
 
@@ -199,7 +208,7 @@ async def lifespan(app: FastAPI):
     )
 
     page = await context.new_page()
-    await page.goto("https://www.google.com")
+    await page.goto(INITIAL_URL)
     
     # Auto-calibrate coordinate offset between Playwright and PyAutoGUI
     try:

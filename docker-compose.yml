@@ -18,6 +18,7 @@ services:
       - SCREEN_WIDTH=1920
       - SCREEN_HEIGHT=1080
       - SCREEN_DEPTH=24
+      - INITIAL_URL=about:blank
       
     # 共享記憶體大小 (Chromium 需要)
     shm_size: '2gb'
