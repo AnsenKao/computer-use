@@ -52,9 +52,16 @@ COPY requirements.txt .
 # 安裝 Python 依賴
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 安裝 Playwright 瀏覽器
-RUN playwright install chromium
-RUN playwright install-deps chromium
+# 安裝 Microsoft Edge
+RUN wget -q https://packages.microsoft.com/keys/microsoft.asc -O- | apt-key add - \
+    && echo "deb [arch=amd64] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge.list \
+    && apt-get update \
+    && apt-get install -y microsoft-edge-stable \
+    && rm -rf /var/lib/apt/lists/*
+
+# 安裝 Playwright 瀏覽器（msedge channel）
+RUN playwright install msedge
+RUN playwright install-deps msedge
 
 # 複製應用程式碼
 COPY . .

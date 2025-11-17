@@ -171,6 +171,7 @@ async def lifespan(app: FastAPI):
     # Launch browser in fullscreen
     try:
         browser = await playwright.chromium.launch(
+            channel="msedge",
             headless=False,
             args=[
                 "--start-fullscreen",
@@ -184,10 +185,10 @@ async def lifespan(app: FastAPI):
             ]
         )
     except Exception as e:
-        print(f"Failed to launch default browser: {e}")
+        print(f"Failed to launch msedge: {e}")
         print("Trying with executable path...")
         browser = await playwright.chromium.launch(
-            executable_path="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
+            executable_path="/usr/bin/microsoft-edge",
             headless=False,
             args=[
                 "--start-fullscreen",
