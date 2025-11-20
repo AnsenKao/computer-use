@@ -29,7 +29,7 @@ def _ensure_pyautogui():
     return pyautogui
 
 # Azure AI Configuration
-AZURE_ENDPOINT = "https://abscgpt01.cognitiveservices.azure.com/openai/v1/"
+AZURE_ENDPOINT = os.getenv("AZURE_ENDPOINT", "https://your-azure-endpoint.openai.azure.com/")
 AZURE_API_KEY = os.getenv("AZURE_API_KEY", "your-azure-api-key-here")
 MODEL_DEPLOYMENT = "computer-use-preview"
 
