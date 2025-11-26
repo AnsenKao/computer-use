@@ -1,0 +1,199 @@
+# Azure DevOps Pipeline for MyAgents Backend
+trigger:
+- master
+
+pool:
+  vmImage: 'ubuntu-latest'
+
+variables:
+  # ACR 設定
+  acrName: 'openaiacr'
+  acrLoginServer: '$(acrName).azurecr.io'
+  
+  # 映像檔設定
+  imageName: 'computer-use'
+  imageTag: 'v$(Build.BuildId)'
+  latestTag: 'latest'
+  
+  # Container App 設定
+  containerAppName: 'browser-server-prod'
+  resourceGroupName: 'langfuse-rg'
+  
+  # Dockerfile 路徑
+  dockerfilePath: 'Dockerfile'
+
+stages:
+# CI Stage - Build and Push Image
+- stage: CI
+  displayName: 'Continuous Integration'
+  jobs:
+  - job: BuildAndPush
+    displayName: 'Build Docker Image and Push to ACR'
+    steps:
+    
+    # 檢出程式碼
+    - checkout: self
+      displayName: 'Checkout Source Code'
+    
+    # 驗證必要檔案存在
+    - script: |
+        echo "Checking required files..."
+        ls -la
+        
+        # 檢查 Dockerfile
+        if [ ! -f "Dockerfile" ]; then
+          echo "❌ Dockerfile not found"
+          exit 1
+        fi
+        
+        # 檢查 requirements.txt
+        if [ ! -f "requirements.txt" ]; then
+          echo "❌ requirements.txt not found"
+          exit 1
+        fi
+        
+        # 檢查主程式
+        if [ ! -f "computer_use_backend.py" ]; then
+          echo "❌ computer_use_backend.py not found"
+          exit 1
+        fi
+        
+        # 檢查 static 目錄和 index.html
+        if [ ! -d "static" ]; then
+          echo "❌ static directory not found"
+          exit 1
+        fi
+        
+        if [ ! -f "static/index.html" ]; then
+          echo "❌ static/index.html not found"
+          exit 1
+        fi
+        
+        echo "✅ All required files found"
+        echo "📋 Project structure:"
+        tree -L 2 || ls -R
+      displayName: 'Validate Required Files'
+    
+    # 使用 AzureCLI 建立和推送 Docker 映像檔
+    - task: AzureCLI@2
+      displayName: 'Build and Push Docker Image'
+      inputs:
+        azureSubscription: 'AUO-OpenAI-OpenAI-Service-ImageMeasure-Infra-Config-ADTEC3'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "Logging into ACR..."
+          az acr login --name $(acrName)
+          
+          echo "Building Docker image..."
+          docker build -t $(acrLoginServer)/$(imageName):$(imageTag) \
+                       -t $(acrLoginServer)/$(imageName):$(latestTag) \
+                       --no-cache --progress=plain \
+                       -f $(dockerfilePath) .
+          
+          echo "Pushing Docker image..."
+          docker push $(acrLoginServer)/$(imageName):$(imageTag)
+          docker push $(acrLoginServer)/$(imageName):$(latestTag)
+          
+          echo "✅ Build and push completed"
+    
+    # 簡化的映像檔驗證 (跳過容器測試，因為需要數據庫連接)
+    - task: AzureCLI@2
+      displayName: 'Verify Image Push'
+      inputs:
+        azureSubscription: 'AUO-OpenAI-OpenAI-Service-ImageMeasure-Infra-Config-ADTEC3'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "Verifying image push to ACR..."
+          az acr repository show-tags --name $(acrName) --repository $(imageName) --output table
+          
+          echo "Checking specific tag: $(imageTag)"
+          # 簡化驗證 - 只檢查標籤是否存在於列表中
+          if az acr repository show-tags --name $(acrName) --repository $(imageName) | grep -q "$(imageTag)"; then
+            echo "✅ Image $(imageName):$(imageTag) successfully pushed to ACR"
+            echo "📋 Available tags:"
+            az acr repository show-tags --name $(acrName) --repository $(imageName) --output table
+          else
+            echo "❌ Failed to verify image $(imageName):$(imageTag) in ACR"
+            echo "Available tags:"
+            az acr repository show-tags --name $(acrName) --repository $(imageName) --output table
+            exit 1
+          fi
+
+# CD Stage - Deploy to Container Apps
+- stage: CD
+  displayName: 'Continuous Deployment'
+  dependsOn: CI
+  condition: and(succeeded(), eq(variables['Build.SourceBranch'], 'refs/heads/master'))
+  jobs:
+  - job: DeployToContainerApps
+    displayName: 'Deploy to Azure Container Apps'
+    steps:
+    
+    # 部署到 Azure Container Apps
+    - task: AzureCLI@2
+      displayName: 'Update Container App'
+      inputs:
+        azureSubscription: 'AUO-OpenAI-OpenAI-Service-ImageMeasure-Infra-Config-ADTEC3'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "Updating Container App: $(containerAppName)"
+          echo "New Image: $(acrLoginServer)/$(imageName):$(imageTag)"
+          
+          # 更新 Container App 使用新的映像檔
+          az containerapp update \
+            --name $(containerAppName) \
+            --resource-group $(resourceGroupName) \
+            --image $(acrLoginServer)/$(imageName):$(imageTag) \
+            --output table
+          
+          echo "✅ Container App update command completed"
+    
+    # 等待部署完成
+    - script: |
+        echo "Waiting for deployment to complete..."
+        sleep 60
+      displayName: 'Wait for Deployment'
+    
+    # 驗證部署狀態
+    - task: AzureCLI@2
+      displayName: 'Verify Deployment'
+      inputs:
+        azureSubscription: 'AUO-OpenAI-OpenAI-Service-ImageMeasure-Infra-Config-ADTEC3'
+        scriptType: 'bash'
+        scriptLocation: 'inlineScript'
+        inlineScript: |
+          echo "Checking Container App status..."
+          
+          # 檢查 Container App 狀態
+          status=$(az containerapp show \
+            --name $(containerAppName) \
+            --resource-group $(resourceGroupName) \
+            --query "properties.provisioningState" \
+            --output tsv)
+          
+          echo "Container App provisioning state: $status"
+          
+          if [ "$status" = "Succeeded" ]; then
+            echo "✅ Deployment verification successful"
+            
+            # 取得應用程式 URL
+            fqdn=$(az containerapp show \
+              --name $(containerAppName) \
+              --resource-group $(resourceGroupName) \
+              --query "properties.configuration.ingress.fqdn" \
+              --output tsv)
+            
+            if [ -n "$fqdn" ]; then
+              echo "🌐 Application URL: https://$fqdn"
+              echo "📊 You can now access the application at the above URL"
+            else
+              echo "⚠️ Could not retrieve application FQDN"
+            fi
+            
+          else
+            echo "❌ Deployment verification failed - Container App status: $status"
+            exit 1
+          fi
