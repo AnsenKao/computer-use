@@ -167,7 +167,21 @@ async def lifespan(app: FastAPI):
     context = await browser.new_context(
         viewport={"width": DISPLAY_WIDTH, "height": DISPLAY_HEIGHT},
         accept_downloads=True,
-        no_viewport=True  # 不限制 viewport，使用全螢幕
+        no_viewport=True,  # 不限制 viewport，使用全螢幕
+        # 啟用 cookie 和 storage
+        storage_state=None,  # 允許保存 cookies 和 localStorage
+        # 設定真實的 User-Agent，避免被識別為 bot
+        user_agent="Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36",
+        # 允許 JavaScript
+        java_script_enabled=True,
+        # 接受所有 cookies
+        bypass_csp=False,
+        # 忽略 HTTPS 錯誤
+        ignore_https_errors=True,
+        # 設定合理的 timeout
+        extra_http_headers={
+            "Accept-Language": "en-US,en;q=0.9,zh-TW;q=0.8,zh;q=0.7"
+        }
     )
 
     page = await context.new_page()
@@ -236,16 +250,20 @@ async def take_screenshot_safe():
                 return state["last_screenshot"]
             raise Exception("Page is closed")
         
-        # 跳過正在導航的頁面截圖，避免干擾
+        # 快速檢查頁面狀態，不干擾導航
         try:
-            # 使用短 timeout 快速檢查是否在導航中
-            await page.wait_for_load_state("domcontentloaded", timeout=50)
+            # 使用 evaluate 檢查 document.readyState，這比 wait_for_load_state 更輕量
+            ready_state = await page.evaluate("document.readyState", timeout=100)
+            # 如果頁面正在載入（loading），使用緩存避免干擾
+            if ready_state == "loading" and state["last_screenshot"]:
+                return state["last_screenshot"]
         except Exception:
-            # 如果正在導航，返回緩存的截圖
+            # 如果檢查失敗（可能正在導航），使用緩存
             if state["last_screenshot"]:
                 return state["last_screenshot"]
         
-        png = await page.screenshot(type="png", full_page=False)
+        # 嘗試截圖，使用較短的 timeout
+        png = await page.screenshot(type="png", full_page=False, timeout=3000)
         state["last_screenshot"] = base64.b64encode(png).decode("utf-8")
         return state["last_screenshot"]
     except Exception as e:
@@ -595,17 +613,25 @@ async def websocket_screenshot(websocket: WebSocket):
                     
                     # 記錄點擊前的 URL
                     url_before = page.url
-                    await page.mouse.click(x, y)
-                    print(f"👆 Click at ({x}, {y})")
+                    print(f"👆 Click at ({x}, {y}) on page: {url_before}")
                     
-                    # 等待可能的導航
-                    await asyncio.sleep(0.2)
-                    try:
-                        if page.url != url_before:
-                            await page.wait_for_load_state("domcontentloaded", timeout=5000)
-                            print(f"🔗 導航完成: {url_before} -> {page.url}")
-                    except Exception:
-                        pass
+                    await page.mouse.click(x, y)
+                    
+                    # 等待可能的導航（給頁面時間開始導航）
+                    await asyncio.sleep(0.5)
+                    
+                    # 檢查是否有導航發生
+                    if page.url != url_before:
+                        print(f"🔄 導航開始: {url_before} -> {page.url}")
+                        try:
+                            # 等待新頁面載入完成
+                            await page.wait_for_load_state("load", timeout=10000)
+                            print(f"✅ 導航完成: {page.url}")
+                        except Exception as e:
+                            print(f"⚠️ 導航等待超時: {e}")
+                    else:
+                        # 沒有導航，可能是同頁操作
+                        print("ℹ️ 同頁點擊，無導航")
                     
                 elif message_type == "keypress":
                     state["mode"] = "human"
