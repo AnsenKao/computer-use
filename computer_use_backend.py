@@ -250,28 +250,20 @@ async def take_screenshot_safe():
                 return state["last_screenshot"]
             raise Exception("Page is closed")
         
-        # 快速檢查頁面狀態，不干擾導航
-        try:
-            # 使用 evaluate 檢查 document.readyState，這比 wait_for_load_state 更輕量
-            ready_state = await page.evaluate("document.readyState", timeout=100)
-            # 如果頁面正在載入（loading），使用緩存避免干擾
-            if ready_state == "loading" and state["last_screenshot"]:
-                return state["last_screenshot"]
-        except Exception:
-            # 如果檢查失敗（可能正在導航），使用緩存
-            if state["last_screenshot"]:
-                return state["last_screenshot"]
-        
-        # 嘗試截圖，使用較短的 timeout
-        png = await page.screenshot(type="png", full_page=False, timeout=3000)
+        # 直接截圖，不做複雜檢查
+        png = await page.screenshot(type="png", full_page=False, timeout=5000)
         state["last_screenshot"] = base64.b64encode(png).decode("utf-8")
         return state["last_screenshot"]
     except Exception as e:
-        # 只在真正失敗且沒有緩存時才 log
-        if not state["last_screenshot"]:
-            print(f"❌ Screenshot failed: {e}")
+        # 截圖失敗時使用緩存
         if state["last_screenshot"]:
+            # 只在第一次失敗時 log
+            if not hasattr(take_screenshot_safe, '_last_error_logged'):
+                print(f"⚠️ Screenshot failed, using cache: {e}")
+                take_screenshot_safe._last_error_logged = True
             return state["last_screenshot"]
+        # 沒有緩存時才拋出錯誤
+        print(f"❌ Screenshot failed and no cache: {e}")
         raise
 
 
