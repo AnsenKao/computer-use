@@ -1,6 +1,6 @@
 # Azure DevOps Pipeline for MyAgents Backend
 trigger:
-- master
+- main
 
 pool:
   vmImage: 'ubuntu-latest'
