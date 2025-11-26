@@ -7,26 +7,12 @@ from pydantic import BaseModel
 from contextlib import asynccontextmanager
 import base64
 import asyncio
-from typing import Optional, List, Set
+from typing import Optional, Set
 from playwright.async_api import async_playwright, TimeoutError
 from openai import OpenAI
 import time
 import json
 import os
-import threading
-
-# Lazy import pyautogui to avoid X display connection at import time
-pyautogui = None
-
-def _ensure_pyautogui():
-    """Lazy load pyautogui when needed."""
-    global pyautogui
-    if pyautogui is None:
-        import pyautogui as _pyautogui
-        _pyautogui.FAILSAFE = True
-        _pyautogui.PAUSE = 0.1
-        pyautogui = _pyautogui
-    return pyautogui
 
 # Azure AI Configuration
 AZURE_ENDPOINT = os.getenv("AZURE_ENDPOINT", "https://your-azure-endpoint.openai.azure.com/")
@@ -38,11 +24,6 @@ DISPLAY_WIDTH = int(os.getenv("SCREEN_WIDTH", "1920"))
 DISPLAY_HEIGHT = int(os.getenv("SCREEN_HEIGHT", "1080"))
 INITIAL_URL = os.getenv("INITIAL_URL", "about:blank")
 MAX_AI_ITERATIONS = 10
-
-# Browser window offset - auto-calibrated at startup
-# Accounts for window manager title bar and browser chrome
-BROWSER_OFFSET_X = 0
-BROWSER_OFFSET_Y = 0
 
 # Global browser instances
 playwright = None
@@ -177,7 +158,7 @@ async def lifespan(app: FastAPI):
                 "--start-fullscreen",
                 "--kiosk",
                 f"--window-size={DISPLAY_WIDTH},{DISPLAY_HEIGHT}",
-                f"--window-position=0,0",
+                "--window-position=0,0",
                 "--disable-extensions",
                 "--disable-infobars",
                 "--no-default-browser-check",
@@ -194,7 +175,7 @@ async def lifespan(app: FastAPI):
                 "--start-fullscreen",
                 "--kiosk",
                 f"--window-size={DISPLAY_WIDTH},{DISPLAY_HEIGHT}",
-                f"--window-position=0,0",
+                "--window-position=0,0",
                 "--disable-extensions",
                 "--disable-infobars",
                 "--no-default-browser-check",
@@ -211,171 +192,8 @@ async def lifespan(app: FastAPI):
     page = await context.new_page()
     await page.goto(INITIAL_URL)
     
-    # Auto-calibrate coordinate offset between Playwright and PyAutoGUI
-    try:
-        # Get viewport information
-        viewport_info = await page.evaluate("""
-            () => {
-                const rect = document.documentElement.getBoundingClientRect();
-                return {
-                    // Window position on screen
-                    screenX: window.screenX || 0,
-                    screenY: window.screenY || 0,
-                    
-                    // Window dimensions
-                    outerWidth: window.outerWidth,
-                    outerHeight: window.outerHeight,
-                    innerWidth: window.innerWidth,
-                    innerHeight: window.innerHeight,
-                    
-                    // Viewport offset within the window
-                    viewportOffsetX: window.pageXOffset || 0,
-                    viewportOffsetY: window.pageYOffset || 0,
-                    
-                    // Document element position
-                    docLeft: rect.left,
-                    docTop: rect.top
-                };
-            }
-        """)
-        
-        print(f"📐 Viewport info: {viewport_info}")
-        
-        global BROWSER_OFFSET_X, BROWSER_OFFSET_Y
-        
-        # Initial values from JavaScript (usually 0 in Docker kiosk mode)
-        BROWSER_OFFSET_X = viewport_info.get('screenX', 0)
-        BROWSER_OFFSET_Y = viewport_info.get('screenY', 0)
-        
-        print(f"📍 Browser offset (from JS): X={BROWSER_OFFSET_X}px, Y={BROWSER_OFFSET_Y}px")
-        print(f"📏 Viewport size: {viewport_info.get('innerWidth')}x{viewport_info.get('innerHeight')}")
-        print(f"🖥  Window position: ({viewport_info.get('screenX')}, {viewport_info.get('screenY')})")
-        print(f"🔍 Window dimensions: outer={viewport_info.get('outerWidth')}x{viewport_info.get('outerHeight')}, inner={viewport_info.get('innerWidth')}x{viewport_info.get('innerHeight')}")
-        
-        # Auto-calibrate offset by testing actual click position
-        print("🔧 Auto-calibrating browser offset...")
-        try:
-            # Add a visible marker at page coordinate (100, 100)
-            await page.evaluate("""
-                () => {
-                    const marker = document.createElement('div');
-                    marker.id = 'calibration-marker';
-                    marker.style.cssText = `
-                        position: fixed;
-                        left: 100px;
-                        top: 100px;
-                        width: 20px;
-                        height: 20px;
-                        background: red;
-                        border: 2px solid yellow;
-                        z-index: 999999;
-                        pointer-events: none;
-                    `;
-                    document.body.appendChild(marker);
-                }
-            """)
-            
-            # Use Playwright to click at page coordinate (100, 100)
-            await page.mouse.click(100, 100)
-            
-            # Wait a moment
-            import asyncio
-            await asyncio.sleep(0.3)
-            
-            # Get the actual click position detected by the browser
-            click_result = await page.evaluate("""
-                () => {
-                    return new Promise(resolve => {
-                        let detected = null;
-                        const handler = (e) => {
-                            detected = { x: e.clientX, y: e.clientY };
-                        };
-                        document.addEventListener('click', handler, { once: true });
-                        
-                        // Trigger click at (100, 100) from pyautogui
-                        setTimeout(() => {
-                            document.removeEventListener('click', handler);
-                            resolve(detected);
-                        }, 2000);
-                    });
-                }
-            """)
-            
-            # Now use pyautogui to click at screen coordinate (100, 100)
-            pg = _ensure_pyautogui()
-            print("🖱  Testing pyautogui click at screen (100, 100)...")
-            execute_pyautogui_action(lambda: pg.click(100, 100))
-            
-            # Wait for the click to be detected
-            await asyncio.sleep(0.5)
-            
-            # Check where the click landed in page coordinates
-            click_result = await page.evaluate("""
-                () => {
-                    const clicks = window.__lastClick;
-                    return clicks || null;
-                }
-            """)
-            
-            # Set up click tracking
-            await page.evaluate("""
-                () => {
-                    window.__lastClick = null;
-                    document.addEventListener('click', (e) => {
-                        window.__lastClick = { x: e.clientX, y: e.clientY };
-                    });
-                }
-            """)
-            
-            # Click with pyautogui at screen (100, 100)
-            execute_pyautogui_action(lambda: pg.click(100, 100))
-            await asyncio.sleep(0.3)
-            
-            # Get where it landed in page coordinates
-            click_result = await page.evaluate("() => window.__lastClick")
-            
-            if click_result:
-                page_x = click_result['x']
-                page_y = click_result['y']
-                
-                # Calculate offset: screen_pos - page_pos = offset
-                measured_offset_x = 100 - page_x
-                measured_offset_y = 100 - page_y
-                
-                print("📏 Calibration result:")
-                print("   PyAutoGUI clicked at screen: (100, 100)")
-                print(f"   Browser detected click at page: ({page_x}, {page_y})")
-                print(f"   Calculated offset: X={measured_offset_x}px, Y={measured_offset_y}px")
-                
-                # Use measured offset if reasonable
-                if -200 <= measured_offset_x <= 200 and -200 <= measured_offset_y <= 200:
-                    BROWSER_OFFSET_X = int(measured_offset_x)
-                    BROWSER_OFFSET_Y = int(measured_offset_y)
-                    print(f"✅ Applied calibrated offset: X={BROWSER_OFFSET_X}px, Y={BROWSER_OFFSET_Y}px")
-                else:
-                    print("⚠️  Measured offset seems unreasonable, using default (0, 0)")
-            else:
-                print("⚠️  Could not detect calibration click")
-            
-            # Remove calibration marker
-            await page.evaluate("() => document.getElementById('calibration-marker')?.remove()")
-            
-        except Exception as calib_error:
-            print(f"⚠️  Auto-calibration failed: {calib_error}")
-            import traceback
-            traceback.print_exc()
-            
-    except Exception as e:
-        print(f"❌ Failed to get viewport info: {e}")
-        import traceback
-        traceback.print_exc()
-        BROWSER_OFFSET_X = 0
-        BROWSER_OFFSET_Y = 0  # Default to no offset
-        print(f"⚠️  Using default offset: X={BROWSER_OFFSET_X}, Y={BROWSER_OFFSET_Y}")
-    
     print(f"✅ Browser initialized at {page.url}")
     print(f"🖼  Screen size: {DISPLAY_WIDTH}x{DISPLAY_HEIGHT}")
-    print(f"🎯 Final browser offset: X={BROWSER_OFFSET_X}px, Y={BROWSER_OFFSET_Y}px")
     
     yield
     
@@ -605,17 +423,9 @@ async def run_ai_task_background(task: str):
         })
 
 
-def execute_pyautogui_action(func):
-    """在新執行緒中執行 pyautogui 動作以避免阻塞"""
-    _ensure_pyautogui()  # Ensure pyautogui is loaded
-    thread = threading.Thread(target=func)
-    thread.start()
-    thread.join()
-
 async def handle_ai_action(action):
-    """Handle different action types from the AI model using pyautogui."""
+    """Handle different action types from the AI model."""
     action_type = action.type
-    pg = _ensure_pyautogui()  # Ensure pyautogui is loaded
     
     if action_type == "drag":
         print("Drag action not supported yet")
@@ -623,92 +433,57 @@ async def handle_ai_action(action):
         
     elif action_type == "click":
         button = getattr(action, "button", "left")
-        x_raw, y_raw = action.x, action.y
+        x, y = validate_coordinates(action.x, action.y)
         
-        # Add browser window offset (same logic as user clicks)
-        x = x_raw + BROWSER_OFFSET_X
-        y = y_raw + BROWSER_OFFSET_Y
-        
-        x, y = validate_coordinates(x, y)
-        
-        print(f"  AI 點擊: 截圖座標=({x_raw}, {y_raw}), 螢幕座標=({x}, {y}), button='{button}'")
+        print(f"  AI Action: click at ({x}, {y}) with button '{button}'")
         
         if button == "back":
             await page.go_back()
         elif button == "forward":
             await page.go_forward()
         elif button == "wheel":
-            # 滾輪操作
-            execute_pyautogui_action(lambda: pg.scroll(-100, x, y))
+            await page.mouse.wheel(0, -100)
         else:
-            # 使用 pyautogui 進行點擊
-            button_map = {"left": "left", "right": "right", "middle": "middle"}
-            pyautogui_button = button_map.get(button, "left")
-            execute_pyautogui_action(lambda: pg.click(x, y, button=pyautogui_button))
+            button_type = {"left": "left", "right": "right", "middle": "middle"}.get(button, "left")
+            await page.mouse.click(x, y, button=button_type)
             try:
                 await page.wait_for_load_state("domcontentloaded", timeout=3000)
             except TimeoutError:
                 pass
         
     elif action_type == "double_click":
-        x_raw, y_raw = action.x, action.y
-        
-        # Add browser window offset
-        x = x_raw + BROWSER_OFFSET_X
-        y = y_raw + BROWSER_OFFSET_Y
-        
-        x, y = validate_coordinates(x, y)
-        print(f"  AI 雙擊: 截圖座標=({x_raw}, {y_raw}), 螢幕座標=({x}, {y})")
-        execute_pyautogui_action(lambda: pg.doubleClick(x, y))
+        x, y = validate_coordinates(action.x, action.y)
+        print(f"  AI Action: double click at ({x}, {y})")
+        await page.mouse.dblclick(x, y)
         
     elif action_type == "scroll":
         scroll_x = getattr(action, "scroll_x", 0)
         scroll_y = getattr(action, "scroll_y", 0)
-        x_raw, y_raw = action.x, action.y
+        x, y = validate_coordinates(action.x, action.y)
         
-        # Add browser window offset
-        x = x_raw + BROWSER_OFFSET_X
-        y = y_raw + BROWSER_OFFSET_Y
-        
-        x, y = validate_coordinates(x, y)
-        
-        print(f"  AI 滾動: 截圖座標=({x_raw}, {y_raw}), 螢幕座標=({x}, {y}), offset=({scroll_x}, {scroll_y})")
-        # 移動滑鼠到指定位置再滾動
-        execute_pyautogui_action(lambda: pg.moveTo(x, y, duration=0.1))
-        # pyautogui.scroll 的參數是滾動的「刻度」，負數向下
-        scroll_amount = int(-scroll_y / 10)  # 轉換為滾動刻度
-        execute_pyautogui_action(lambda: pg.scroll(scroll_amount))
+        print(f"  AI Action: scroll at ({x}, {y}) with offsets ({scroll_x}, {scroll_y})")
+        await page.mouse.move(x, y)
+        await page.evaluate(f"window.scrollBy({{left: {scroll_x}, top: {scroll_y}, behavior: 'smooth'}});")
         
     elif action_type == "keypress":
         keys = getattr(action, "keys", [])
         print(f"  AI Action: keypress {keys}")
-        
-        # PyAutoGUI 按鍵映射
-        pyautogui_key_map = {
-            "ctrl": "ctrl", "control": "ctrl", "shift": "shift", "alt": "alt",
-            "cmd": "command", "super": "command", "win": "command", "meta": "command",
-            "enter": "enter", "return": "enter", "backspace": "backspace",
-            "tab": "tab", "esc": "escape", "escape": "escape",
-            "space": "space", " ": "space",
-            "arrowup": "up", "arrowdown": "down", "arrowleft": "left", "arrowright": "right",
-            "delete": "delete", "home": "home", "end": "end",
-            "pageup": "pageup", "pagedown": "pagedown"
-        }
-        
-        mapped_keys = [pyautogui_key_map.get(key.lower(), key.lower()) for key in keys]
+        mapped_keys = [KEY_MAPPING.get(key.lower(), key) for key in keys]
         
         if len(mapped_keys) > 1:
-            # 組合鍵
-            execute_pyautogui_action(lambda: pg.hotkey(*mapped_keys))
+            for key in mapped_keys:
+                await page.keyboard.down(key)
+            await asyncio.sleep(0.1)
+            for key in reversed(mapped_keys):
+                await page.keyboard.up(key)
         else:
-            # 單一按鍵
-            execute_pyautogui_action(lambda: pg.press(mapped_keys[0]))
+            for key in mapped_keys:
+                await page.keyboard.press(key)
                 
     elif action_type == "type":
         text = getattr(action, "text", "")
         print(f"  AI Action: type text: {text[:50]}...")
-        # 使用 pyautogui 輸入文字
-        execute_pyautogui_action(lambda: pg.write(text, interval=0.02))
+        await page.keyboard.type(text, delay=20)
         
     elif action_type == "wait":
         ms = getattr(action, "ms", 1000)
@@ -794,24 +569,9 @@ async def websocket_screenshot(websocket: WebSocket):
                 elif message_type == "click":
                     state["mode"] = "human"
                     state["last_human"] = time.time()
-                    x_raw, y_raw = message.get("x", 0), message.get("y", 0)
-                    
-                    # 調整點擊座標
-                    # Playwright screenshot 只截取頁面內容 (innerWidth x innerHeight)
-                    # 但 pyautogui 點擊是相對於螢幕，需要加上瀏覽器視窗的偏移量
-                    x = x_raw + BROWSER_OFFSET_X
-                    y = y_raw + BROWSER_OFFSET_Y
-                    
-                    x, y = validate_coordinates(x, y)
-                    print(f"👆 點擊: 截圖座標=({x_raw}, {y_raw}), 螢幕座標=({x}, {y}), 偏移=({BROWSER_OFFSET_X}, {BROWSER_OFFSET_Y})")
-                    try:
-                        pg = _ensure_pyautogui()
-                        execute_pyautogui_action(lambda: pg.click(x, y))
-                        print("   點擊執行完成")
-                    except Exception as e:
-                        print(f"   ❌ 點擊執行錯誤: {e}")
-                        import traceback
-                        traceback.print_exc()
+                    x, y = validate_coordinates(message.get("x", 0), message.get("y", 0))
+                    await page.mouse.click(x, y)
+                    print(f"👆 Click at ({x}, {y})")
                     
                 elif message_type == "keypress":
                     state["mode"] = "human"
@@ -821,36 +581,35 @@ async def websocket_screenshot(websocket: WebSocket):
                     shift = message.get("shift", False)
                     alt = message.get("alt", False)
                     
-                    # Type text or press keys using pyautogui
-                    pg = _ensure_pyautogui()
+                    # Map special keys
+                    key_map = {
+                        'Enter': 'Enter', 'Backspace': 'Backspace', 'Tab': 'Tab',
+                        'Escape': 'Escape', 'ArrowUp': 'ArrowUp', 'ArrowDown': 'ArrowDown',
+                        'ArrowLeft': 'ArrowLeft', 'ArrowRight': 'ArrowRight',
+                        'Delete': 'Delete', ' ': ' '
+                    }
+                    
+                    mapped_key = key_map.get(key, key)
+                    
+                    # Build modifiers list
+                    modifiers = []
+                    if ctrl:
+                        modifiers.append('Control')
+                    if shift:
+                        modifiers.append('Shift')
+                    if alt:
+                        modifiers.append('Alt')
+                    
+                    # Type or press key
                     if len(key) == 1 and key.isprintable() and not ctrl and not alt:
-                        execute_pyautogui_action(lambda: pg.write(key, interval=0.02))
+                        await page.keyboard.type(key)
                     else:
-                        keys = []
-                        if ctrl:
-                            keys.append('ctrl')
-                        if shift:
-                            keys.append('shift')
-                        if alt:
-                            keys.append('alt')
-                        
-                        # PyAutoGUI 按鍵映射
-                        pyautogui_key_map = {
-                            'Enter': 'enter', 'Backspace': 'backspace', 'Tab': 'tab',
-                            'Escape': 'escape', 'ArrowUp': 'up', 'ArrowDown': 'down',
-                            'ArrowLeft': 'left', 'ArrowRight': 'right',
-                            'Delete': 'delete', ' ': 'space'
-                        }
-                        
-                        mapped_key = pyautogui_key_map.get(key, key.lower() if len(key) == 1 else None)
-                        if mapped_key:
-                            keys.append(mapped_key)
-                        
-                        if keys:
-                            if len(keys) > 1:
-                                execute_pyautogui_action(lambda: pg.hotkey(*keys))
-                            else:
-                                execute_pyautogui_action(lambda: pg.press(keys[0]))
+                        # Press with modifiers
+                        for mod in modifiers:
+                            await page.keyboard.down(mod)
+                        await page.keyboard.press(mapped_key)
+                        for mod in reversed(modifiers):
+                            await page.keyboard.up(mod)
                     
                 elif message_type == "scroll":
                     state["mode"] = "human"
@@ -933,11 +692,7 @@ async def get_state():
         "task": state["task"],
         "iteration_count": state["iteration_count"],
         "history_length": len(state["history"]),
-        "current_url": page.url if page else None,
-        "browser_offset": {
-            "x": BROWSER_OFFSET_X,
-            "y": BROWSER_OFFSET_Y
-        }
+        "current_url": page.url if page else None
     }
 
 
