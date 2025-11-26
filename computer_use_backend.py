@@ -150,38 +150,19 @@ async def lifespan(app: FastAPI):
     playwright = await async_playwright().start()
 
     # Launch browser in fullscreen
-    try:
-        browser = await playwright.chromium.launch(
-            channel="msedge",
-            headless=False,
-            args=[
-                "--start-fullscreen",
-                "--kiosk",
-                f"--window-size={DISPLAY_WIDTH},{DISPLAY_HEIGHT}",
-                "--window-position=0,0",
-                "--disable-extensions",
-                "--disable-infobars",
-                "--no-default-browser-check",
-                "--disable-popup-blocking"
-            ]
-        )
-    except Exception as e:
-        print(f"Failed to launch msedge: {e}")
-        print("Trying with executable path...")
-        browser = await playwright.chromium.launch(
-            executable_path="/usr/bin/microsoft-edge",
-            headless=False,
-            args=[
-                "--start-fullscreen",
-                "--kiosk",
-                f"--window-size={DISPLAY_WIDTH},{DISPLAY_HEIGHT}",
-                "--window-position=0,0",
-                "--disable-extensions",
-                "--disable-infobars",
-                "--no-default-browser-check",
-                "--disable-popup-blocking"
-            ]
-        )
+    browser = await playwright.chromium.launch(
+        headless=False,
+        args=[
+            "--start-fullscreen",
+            "--kiosk",
+            f"--window-size={DISPLAY_WIDTH},{DISPLAY_HEIGHT}",
+            "--window-position=0,0",
+            "--disable-extensions",
+            "--disable-infobars",
+            "--no-default-browser-check",
+            "--disable-popup-blocking"
+        ]
+    )
 
     context = await browser.new_context(
         viewport={"width": DISPLAY_WIDTH, "height": DISPLAY_HEIGHT},
