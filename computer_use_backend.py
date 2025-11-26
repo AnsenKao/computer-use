@@ -23,7 +23,7 @@ MODEL_DEPLOYMENT = "computer-use-preview"
 DISPLAY_WIDTH = int(os.getenv("SCREEN_WIDTH", "1920"))
 DISPLAY_HEIGHT = int(os.getenv("SCREEN_HEIGHT", "1080"))
 INITIAL_URL = os.getenv("INITIAL_URL", "about:blank")
-MAX_AI_ITERATIONS = 10
+MAX_AI_ITERATIONS = 40
 
 # Global browser instances
 playwright = None
