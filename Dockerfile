@@ -29,10 +29,7 @@ RUN apt-get update && apt-get install -y \
     libxkbcommon0 \
     libxrandr2 \
     xdg-utils \
-    # PyAutoGUI 依賴
-    python3-tk \
-    python3-dev \
-    scrot \
+    # Virtual display and window manager
     xvfb \
     x11vnc \
     fluxbox \
@@ -52,17 +49,9 @@ COPY requirements.txt .
 # 安裝 Python 依賴
 RUN pip install --no-cache-dir -r requirements.txt
 
-# 安裝 Microsoft Edge (使用新的 GPG 金鑰方法)
-RUN wget -q https://packages.microsoft.com/keys/microsoft.asc -O /tmp/microsoft.asc \
-    && gpg --dearmor < /tmp/microsoft.asc > /usr/share/keyrings/microsoft-edge.gpg \
-    && echo "deb [arch=amd64 signed-by=/usr/share/keyrings/microsoft-edge.gpg] https://packages.microsoft.com/repos/edge stable main" > /etc/apt/sources.list.d/microsoft-edge.list \
-    && apt-get update \
-    && apt-get install -y microsoft-edge-stable \
-    && rm -rf /var/lib/apt/lists/* /tmp/microsoft.asc
-
-# 安裝 Playwright 瀏覽器（msedge channel）
-RUN playwright install msedge
-RUN playwright install-deps msedge
+# 安裝 Playwright Chromium 瀏覽器
+RUN playwright install chromium
+RUN playwright install-deps chromium
 
 # 複製應用程式碼
 COPY . .
