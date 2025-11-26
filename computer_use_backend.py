@@ -105,8 +105,8 @@ class ConnectionManager:
                 if frame_count % 300 == 0:
                     print(f"📊 串流狀態: {frame_count} 幀已發送，{len(self.active_connections)} 個連接")
                 
-                # Adjust FPS (30 FPS = ~33ms delay)
-                await asyncio.sleep(0.033)
+                # Adjust FPS (20 FPS = ~50ms delay) - 降低頻率避免干擾頁面載入
+                await asyncio.sleep(0.05)
                 
             except Exception as e:
                 print(f"❌ Screenshot streaming error: {e}")
@@ -227,9 +227,24 @@ def validate_coordinates(x: int, y: int) -> tuple:
 
 async def take_screenshot_safe():
     """Take a screenshot with caching for failures."""
-    global state
+    global state, page
     
     try:
+        # 檢查頁面是否正在導航或關閉
+        if not page or page.is_closed():
+            if state["last_screenshot"]:
+                return state["last_screenshot"]
+            raise Exception("Page is closed")
+        
+        # 跳過正在導航的頁面截圖，避免干擾
+        try:
+            # 使用短 timeout 快速檢查是否在導航中
+            await page.wait_for_load_state("domcontentloaded", timeout=50)
+        except Exception:
+            # 如果正在導航，返回緩存的截圖
+            if state["last_screenshot"]:
+                return state["last_screenshot"]
+        
         png = await page.screenshot(type="png", full_page=False)
         state["last_screenshot"] = base64.b64encode(png).decode("utf-8")
         return state["last_screenshot"]
@@ -244,6 +259,8 @@ async def take_screenshot_safe():
 
 async def run_ai_task_background(task: str):
     """Run AI task in background and broadcast progress via WebSocket."""
+    global page
+    
     try:
         # Take initial screenshot
         screenshot_b64 = await take_screenshot_safe()
@@ -337,16 +354,30 @@ async def run_ai_task_background(task: str):
             await page.bring_to_front()
             await handle_ai_action(action)
             
-            # Handle new tabs/pages
+            # Handle new tabs/pages and wait for navigation
             if action.type in ["click"]:
-                await asyncio.sleep(1.5)
+                await asyncio.sleep(0.8)  # 給頁面時間開始導航
+                
+                # 檢查是否有新分頁
                 all_pages = page.context.pages
                 if len(all_pages) > 1:
                     newest_page = all_pages[-1]
                     if newest_page != page and newest_page.url not in ["about:blank", ""]:
+                        # 正確更新全域變數
+                        page = newest_page
                         globals()['page'] = newest_page
+                        print(f"📄 切換到新分頁: {newest_page.url}")
+                
+                # 等待當前頁面完成導航（如果有的話）
+                try:
+                    await page.wait_for_load_state("networkidle", timeout=3000)
+                except Exception:
+                    try:
+                        await page.wait_for_load_state("domcontentloaded", timeout=2000)
+                    except Exception:
+                        pass  # 如果沒有導航就繼續
             elif action.type != "wait":
-                await asyncio.sleep(0.5)
+                await asyncio.sleep(0.3)
             
             # Take screenshot after action
             screenshot_b64 = await take_screenshot_safe()
@@ -426,9 +457,19 @@ async def handle_ai_action(action):
             await page.mouse.wheel(0, -100)
         else:
             button_type = {"left": "left", "right": "right", "middle": "middle"}.get(button, "left")
+            
+            # 記錄點擊前的 URL
+            url_before = page.url
             await page.mouse.click(x, y, button=button_type)
+            
+            # 給一點時間讓導航開始
+            await asyncio.sleep(0.2)
+            
+            # 如果 URL 改變了，等待新頁面載入
             try:
-                await page.wait_for_load_state("domcontentloaded", timeout=3000)
+                if page.url != url_before:
+                    await page.wait_for_load_state("domcontentloaded", timeout=5000)
+                    print(f"🔗 導航完成: {url_before} -> {page.url}")
             except TimeoutError:
                 pass
         
@@ -551,8 +592,20 @@ async def websocket_screenshot(websocket: WebSocket):
                     state["mode"] = "human"
                     state["last_human"] = time.time()
                     x, y = validate_coordinates(message.get("x", 0), message.get("y", 0))
+                    
+                    # 記錄點擊前的 URL
+                    url_before = page.url
                     await page.mouse.click(x, y)
                     print(f"👆 Click at ({x}, {y})")
+                    
+                    # 等待可能的導航
+                    await asyncio.sleep(0.2)
+                    try:
+                        if page.url != url_before:
+                            await page.wait_for_load_state("domcontentloaded", timeout=5000)
+                            print(f"🔗 導航完成: {url_before} -> {page.url}")
+                    except Exception:
+                        pass
                     
                 elif message_type == "keypress":
                     state["mode"] = "human"
