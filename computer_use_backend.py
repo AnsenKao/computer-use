@@ -2,7 +2,7 @@
 
 from fastapi import FastAPI, WebSocket, WebSocketDisconnect
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, StreamingResponse
 from pydantic import BaseModel
 from contextlib import asynccontextmanager
 import base64
@@ -752,8 +752,8 @@ async def get_state():
 async def ai_start(request: AITaskRequest):
     """
     Start an AI task with Azure Computer Use model.
-    This initializes the task and returns immediately.
-    Use /ai/tick to step through execution.
+    Task runs in background and broadcasts progress via WebSocket.
+    Returns immediately after starting the task.
     """
     if state["ai_running"]:
         return {
@@ -761,58 +761,28 @@ async def ai_start(request: AITaskRequest):
             "message": "AI task already running. Stop it first with /ai/stop"
         }
     
-    # Reset state
+    # Start AI task in background
     state["mode"] = "ai"
     state["task"] = request.task
     state["ai_running"] = True
     state["iteration_count"] = 0
-    state["current_response_id"] = None
     
-    # Take initial screenshot
-    screenshot_b64 = await take_screenshot_safe()
+    # Broadcast AI status to WebSocket clients
+    await manager.broadcast({
+        "type": "ai_status",
+        "status": "starting",
+        "task": request.task
+    })
     
-    # Initial request to AI model
-    try:
-        response = openai_client.responses.create(
-            model=MODEL_DEPLOYMENT,
-            tools=[{
-                "type": "computer_use_preview",
-                "display_width": DISPLAY_WIDTH,
-                "display_height": DISPLAY_HEIGHT,
-                "environment": "browser"
-            }],
-            instructions="You are an AI agent with the ability to control a browser. You can control the keyboard and mouse. You take a screenshot after each action to check if your action was successful. Once you have completed the requested task you should stop running and pass back control to your human operator.",
-            input=[{
-                "role": "user",
-                "content": [{
-                    "type": "input_text",
-                    "text": request.task
-                }, {
-                    "type": "input_image",
-                    "image_url": f"data:image/png;base64,{screenshot_b64}"
-                }]
-            }],
-            reasoning={"generate_summary": "concise"},
-            truncation="auto"
-        )
-        
-        state["current_response_id"] = response.id
-        
-        return {
-            "status": "started",
-            "task": request.task,
-            "response_id": response.id,
-            "max_iterations": request.max_iterations,
-            "message": "AI task started. Use /ai/tick to execute steps."
-        }
-        
-    except Exception as e:
-        state["ai_running"] = False
-        state["mode"] = "idle"
-        return {
-            "status": "error",
-            "message": f"Failed to start AI task: {str(e)}"
-        }
+    # Start AI task in background
+    asyncio.create_task(run_ai_task_background(request.task))
+    
+    return {
+        "status": "started",
+        "task": request.task,
+        "max_iterations": request.max_iterations or MAX_AI_ITERATIONS,
+        "message": "AI task started in background. Progress will be broadcast via WebSocket."
+    }
 
 
 @app.post("/ai/stop")
@@ -830,6 +800,225 @@ async def ai_stop():
         "iterations_completed": state["iteration_count"],
         "task": state["task"]
     }
+
+
+@app.post("/ai/execute")
+async def ai_execute_streaming(request: AITaskRequest):
+    """
+    Execute an AI task and stream the progress via Server-Sent Events (SSE).
+    Returns real-time updates of AI actions, messages, and status.
+    """
+    if state["ai_running"]:
+        return StreamingResponse(
+            iter(["data: {\"error\": \"AI task already running\"}\n\n"]),
+            media_type="text/event-stream"
+        )
+    
+    async def event_generator():
+        global page
+        
+        try:
+            # Initialize task
+            state["mode"] = "ai"
+            state["task"] = request.task
+            state["ai_running"] = True
+            state["iteration_count"] = 0
+            state["current_response_id"] = None
+            
+            yield f"data: {{\"type\": \"status\", \"message\": \"Starting AI task\", \"task\": \"{request.task}\"}}\n\n"
+            
+            # Take initial screenshot
+            screenshot_b64 = await take_screenshot_safe()
+            yield "data: {\"type\": \"status\", \"message\": \"Taking initial screenshot\"}\n\n"
+            
+            # Initial request to AI model
+            response = openai_client.responses.create(
+                model=MODEL_DEPLOYMENT,
+                tools=[{
+                    "type": "computer_use_preview",
+                    "display_width": DISPLAY_WIDTH,
+                    "display_height": DISPLAY_HEIGHT,
+                    "environment": "browser"
+                }],
+                instructions="You are an AI agent with the ability to control a browser. You can control the keyboard and mouse. You take a screenshot after each action to check if your action was successful. Once you have completed the requested task you should stop running and pass back control to your human operator.",
+                input=[{
+                    "role": "user",
+                    "content": [{
+                        "type": "input_text",
+                        "text": request.task
+                    }, {
+                        "type": "input_image",
+                        "image_url": f"data:image/png;base64,{screenshot_b64}"
+                    }]
+                }],
+                reasoning={"generate_summary": "concise"},
+                truncation="auto"
+            )
+            
+            state["current_response_id"] = response.id
+            yield f"data: {{\"type\": \"status\", \"message\": \"AI response received\", \"response_id\": \"{response.id}\"}}\n\n"
+            
+            # Execute AI task loop
+            max_iterations = request.max_iterations or MAX_AI_ITERATIONS
+            for iteration in range(max_iterations):
+                if not state["ai_running"]:
+                    yield "data: {\"type\": \"status\", \"message\": \"Task stopped by user\"}\n\n"
+                    break
+                    
+                state["iteration_count"] = iteration + 1
+                yield f"data: {{\"type\": \"iteration\", \"count\": {iteration + 1}, \"max\": {max_iterations}}}\n\n"
+                
+                # Get current response
+                response = openai_client.responses.retrieve(response_id=state["current_response_id"])
+                
+                # Check if there's output
+                if not hasattr(response, 'output') or not response.output:
+                    yield "data: {\"type\": \"complete\", \"message\": \"AI task completed - no more output\"}\n\n"
+                    break
+                
+                # Extract text messages
+                text_messages = []
+                for item in response.output:
+                    if hasattr(item, 'type') and item.type == "text":
+                        text_messages.append(item.text)
+                
+                # Stream AI messages
+                if text_messages:
+                    message_text = "\\n".join(text_messages).replace('"', '\\"').replace('\n', '\\n')
+                    yield f"data: {{\"type\": \"message\", \"content\": \"{message_text}\", \"iteration\": {iteration + 1}}}\n\n"
+                
+                # Extract computer calls
+                computer_calls = [item for item in response.output 
+                                 if hasattr(item, 'type') and item.type == "computer_call"]
+                
+                if not computer_calls:
+                    yield "data: {\"type\": \"complete\", \"message\": \"AI task completed - no more actions\"}\n\n"
+                    break
+                
+                computer_call = computer_calls[0]
+                if not hasattr(computer_call, 'call_id') or not hasattr(computer_call, 'action'):
+                    yield "data: {\"type\": \"complete\", \"message\": \"AI task completed - invalid action\"}\n\n"
+                    break
+                
+                call_id = computer_call.call_id
+                action = computer_call.action
+                
+                # Stream action info
+                action_data = {
+                    "type": "action",
+                    "action_type": action.type,
+                    "iteration": iteration + 1
+                }
+                
+                # Add action-specific details
+                if action.type in ["click", "double_click"]:
+                    action_data["x"] = getattr(action, "x", None)
+                    action_data["y"] = getattr(action, "y", None)
+                    if action.type == "click":
+                        action_data["button"] = getattr(action, "button", "left")
+                elif action.type == "type":
+                    text = getattr(action, "text", "")
+                    action_data["text"] = text[:100] + ("..." if len(text) > 100 else "")
+                elif action.type == "keypress":
+                    action_data["keys"] = getattr(action, "keys", [])
+                elif action.type == "scroll":
+                    action_data["scroll_x"] = getattr(action, "scroll_x", 0)
+                    action_data["scroll_y"] = getattr(action, "scroll_y", 0)
+                elif action.type == "wait":
+                    action_data["ms"] = getattr(action, "ms", 1000)
+                
+                yield f"data: {json.dumps(action_data)}\n\n"
+                
+                # Execute the action
+                await page.bring_to_front()
+                await handle_ai_action(action)
+                
+                # Handle new tabs/pages and wait for navigation
+                if action.type in ["click"]:
+                    await asyncio.sleep(0.8)
+                    
+                    all_pages = page.context.pages
+                    if len(all_pages) > 1:
+                        newest_page = all_pages[-1]
+                        if newest_page != page and newest_page.url not in ["about:blank", ""]:
+                            page = newest_page
+                            globals()['page'] = newest_page
+                            yield f"data: {{\"type\": \"navigation\", \"message\": \"Switched to new tab\", \"url\": \"{newest_page.url}\"}}\n\n"
+                    
+                    try:
+                        await page.wait_for_load_state("networkidle", timeout=3000)
+                    except Exception:
+                        try:
+                            await page.wait_for_load_state("domcontentloaded", timeout=2000)
+                        except Exception:
+                            pass
+                elif action.type != "wait":
+                    await asyncio.sleep(0.3)
+                
+                yield "data: {\"type\": \"status\", \"message\": \"Action completed, taking screenshot\"}\n\n"
+                
+                # Take screenshot after action
+                screenshot_b64 = await take_screenshot_safe()
+                
+                # Check for safety checks
+                acknowledged_checks = []
+                if hasattr(computer_call, 'pending_safety_checks') and computer_call.pending_safety_checks:
+                    acknowledged_checks = computer_call.pending_safety_checks
+                    yield f"data: {{\"type\": \"warning\", \"message\": \"Safety checks acknowledged\", \"count\": {len(acknowledged_checks)}}}\n\n"
+                
+                # Prepare input for next request
+                input_content = [{
+                    "type": "computer_call_output",
+                    "call_id": call_id,
+                    "output": {
+                        "type": "input_image",
+                        "image_url": f"data:image/png;base64,{screenshot_b64}"
+                    }
+                }]
+                
+                if acknowledged_checks:
+                    input_content[0]["acknowledged_safety_checks"] = [
+                        {"id": c.id, "code": c.code, "message": c.message}
+                        for c in acknowledged_checks
+                    ]
+                
+                # Send screenshot back for next step
+                yield "data: {\"type\": \"status\", \"message\": \"Sending feedback to AI\"}\n\n"
+                
+                next_response = openai_client.responses.create(
+                    model=MODEL_DEPLOYMENT,
+                    previous_response_id=response.id,
+                    tools=[{
+                        "type": "computer_use_preview",
+                        "display_width": DISPLAY_WIDTH,
+                        "display_height": DISPLAY_HEIGHT,
+                        "environment": "browser"
+                    }],
+                    input=input_content,
+                    truncation="auto"
+                )
+                
+                state["current_response_id"] = next_response.id
+                
+            yield f"data: {{\"type\": \"complete\", \"message\": \"AI task finished\", \"iterations\": {state['iteration_count']}}}\n\n"
+            
+        except Exception as e:
+            error_msg = str(e).replace('"', '\\"').replace('\n', '\\n')
+            yield f"data: {{\"type\": \"error\", \"message\": \"{error_msg}\"}}\n\n"
+        finally:
+            state["ai_running"] = False
+            state["mode"] = "idle"
+            yield "data: {\"type\": \"status\", \"message\": \"Task ended\"}\n\n"
+    
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive"
+        }
+    )
 
 
 @app.get("/history")
