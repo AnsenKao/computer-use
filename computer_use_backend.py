@@ -13,11 +13,17 @@ from openai import OpenAI
 import time
 import json
 import os
+import socket
 
 # Azure AI Configuration
 AZURE_ENDPOINT = os.getenv("AZURE_ENDPOINT", "https://your-azure-endpoint.openai.azure.com/")
 AZURE_API_KEY = os.getenv("AZURE_API_KEY", "your-azure-api-key-here")
 MODEL_DEPLOYMENT = "computer-use-preview"
+
+# Browser Use Azure Configuration (可使用不同的 Azure 實例)
+BROWSER_USE_AZURE_ENDPOINT = os.getenv("BROWSER_USE_AZURE_ENDPOINT")
+BROWSER_USE_AZURE_API_KEY = os.getenv("BROWSER_USE_AZURE_API_KEY")
+BROWSER_USE_MODEL = os.getenv("BROWSER_USE_MODEL")
 
 # Display settings - 從環境變數讀取或使用預設值
 DISPLAY_WIDTH = int(os.getenv("SCREEN_WIDTH", "1920"))
@@ -31,13 +37,17 @@ browser = None
 context = None
 page = None
 openai_client = None
+cdp_port = None
+cdp_url = None
+browser_use_session = None
 
 # Global state for AI/Human arbitration
 state = {
-    "mode": "idle",       # idle / ai / human
+    "mode": "idle",       # idle / ai / human / browser-use
     "last_human": 0,      # last human action timestamp
     "task": None,         # current AI task
     "ai_running": False,  # is AI currently executing
+    "browser_use_running": False,  # is browser-use currently executing
     "current_response_id": None,  # current AI response ID
     "iteration_count": 0,  # current iteration
     "last_screenshot": None,  # cache last successful screenshot
@@ -118,6 +128,14 @@ class ConnectionManager:
 
 manager = ConnectionManager()
 
+
+def find_free_port() -> int:
+    """Find a free port for the debugging interface."""
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(('localhost', 0))
+        return s.getsockname()[1]
+
+
 # Key mapping for special keys in Playwright
 KEY_MAPPING = {
     "/": "Slash", "\\": "Backslash", "alt": "Alt", "arrowdown": "ArrowDown",
@@ -133,10 +151,15 @@ class AITaskRequest(BaseModel):
     max_iterations: Optional[int] = MAX_AI_ITERATIONS
 
 
+class BrowserUseTaskRequest(BaseModel):
+    task: str
+    headless: Optional[bool] = False
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
-    global playwright, browser, context, page, openai_client
+    global playwright, browser, context, page, openai_client, cdp_port, cdp_url, browser_use_session
     
     # Startup
     # Initialize OpenAI client
@@ -149,7 +172,11 @@ async def lifespan(app: FastAPI):
     # Initialize Playwright
     playwright = await async_playwright().start()
 
-    # Launch browser in fullscreen
+    # Find a free port for CDP
+    cdp_port = find_free_port()
+    cdp_url = f"http://localhost:{cdp_port}"
+    
+    # Launch browser in fullscreen with CDP enabled
     browser = await playwright.chromium.launch(
         headless=False,
         args=[
@@ -160,7 +187,8 @@ async def lifespan(app: FastAPI):
             "--disable-extensions",
             "--disable-infobars",
             "--no-default-browser-check",
-            "--disable-popup-blocking"
+            "--disable-popup-blocking",
+            f"--remote-debugging-port={cdp_port}"
         ]
     )
 
@@ -187,8 +215,21 @@ async def lifespan(app: FastAPI):
     page = await context.new_page()
     await page.goto(INITIAL_URL)
     
+    # Initialize browser-use session
+    try:
+        from browser_use import BrowserSession
+        browser_use_session = BrowserSession(cdp_url=cdp_url)
+        print(f"✅ Browser-use session initialized with CDP: {cdp_url}")
+    except Exception as e:
+        print(f"⚠️ Browser-use initialization failed: {e}")
+        browser_use_session = None
+        
+    # Make browser_use_session available globally
+    globals()['browser_use_session'] = browser_use_session
+    
     print(f"✅ Browser initialized at {page.url}")
     print(f"🖼  Screen size: {DISPLAY_WIDTH}x{DISPLAY_HEIGHT}")
+    print(f"🔗 CDP URL: {cdp_url}")
     
     yield
     
@@ -445,6 +486,101 @@ async def run_ai_task_background(task: str):
         })
 
 
+async def run_browser_use_task_background(task: str):
+    """Run browser-use task in background and broadcast progress via WebSocket."""
+    global browser_use_session
+    
+    try:
+        if not browser_use_session:
+            await manager.broadcast({
+                "type": "browser_use_message",
+                "message": "❌ Browser-use 未初始化",
+                "status": "error"
+            })
+            return
+            
+        # Import browser-use components
+        from browser_use import Agent, ChatAzureOpenAI
+        
+        # Broadcast start message
+        await manager.broadcast({
+            "type": "browser_use_status",
+            "status": "starting",
+            "task": task
+        })
+        
+        # Initialize LLM with Browser Use Azure OpenAI configuration
+        llm = ChatAzureOpenAI(
+            model="gpt-4o",  # 實際的模型名稱
+            azure_deployment=BROWSER_USE_MODEL,  # Azure 部署名稱
+            azure_endpoint=BROWSER_USE_AZURE_ENDPOINT,
+            api_key=BROWSER_USE_AZURE_API_KEY,
+            api_version="2024-12-01-preview",
+            dont_force_structured_output=True  # 避免 JSON schema 錯誤
+        )
+        
+        # Create agent with our existing browser session
+        agent = Agent(
+            task=task,
+            llm=llm,
+            browser_session=browser_use_session
+        )
+        
+        await manager.broadcast({
+            "type": "browser_use_message",
+            "message": f"🚀 Browser-use agent 開始執行任務: {task}",
+            "status": "running"
+        })
+        
+        # Execute the task
+        result = await agent.run()
+        
+        await manager.broadcast({
+            "type": "browser_use_message",
+            "message": f"✅ Browser-use 任務完成: {result}",
+            "status": "completed"
+        })
+        
+    except Exception as e:
+        print(f"❌ Browser-use task error: {e}")
+        await manager.broadcast({
+            "type": "browser_use_message",
+            "message": f"❌ 錯誤: {str(e)}",
+            "status": "error"
+        })
+    finally:
+        state["browser_use_running"] = False
+        state["mode"] = "idle"
+        
+        # Reset browser session for next use
+        await reset_browser_use_session()
+        
+        await manager.broadcast({
+            "type": "browser_use_status",
+            "status": "stopped"
+        })
+
+
+async def reset_browser_use_session():
+    """Reset the browser-use session."""
+    global browser_use_session
+    
+    try:
+        if browser_use_session:
+            # Stop existing session
+            await browser_use_session.stop()
+            print("✅ Browser-use session stopped")
+        
+        # Recreate session
+        from browser_use import BrowserSession
+        browser_use_session = BrowserSession(cdp_url=cdp_url)
+        print("✅ Browser-use session reset complete")
+        
+    except Exception as e:
+        print(f"⚠️ Browser-use session reset failed: {e}")
+        browser_use_session = None
+
+
 async def handle_ai_action(action):
     """Handle different action types from the AI model."""
     action_type = action.type
@@ -548,7 +684,9 @@ async def api_status():
         "version": "1.0.0",
         "mode": state["mode"],
         "ai_running": state["ai_running"],
-        "current_task": state["task"]
+        "browser_use_running": state["browser_use_running"],
+        "current_task": state["task"],
+        "cdp_url": cdp_url
     }
 
 
@@ -672,7 +810,7 @@ async def websocket_screenshot(websocket: WebSocket):
                 # Handle AI commands
                 elif message_type == "ai_start":
                     task = message.get("task", "")
-                    if task and not state["ai_running"]:
+                    if task and not state["ai_running"] and not state["browser_use_running"]:
                         # Start AI task
                         state["mode"] = "ai"
                         state["task"] = task
@@ -695,6 +833,39 @@ async def websocket_screenshot(websocket: WebSocket):
                         state["mode"] = "idle"
                         await manager.broadcast({
                             "type": "ai_status",
+                            "status": "stopped"
+                        })
+                
+                # Handle Browser-use commands
+                elif message_type == "browser_use_start":
+                    task = message.get("task", "")
+                    if task and not state["browser_use_running"] and not state["ai_running"]:
+                        # Start browser-use task
+                        state["mode"] = "browser-use"
+                        state["task"] = task
+                        state["browser_use_running"] = True
+                        state["iteration_count"] = 0
+                        
+                        # Broadcast status
+                        await manager.broadcast({
+                            "type": "browser_use_status",
+                            "status": "starting",
+                            "task": task
+                        })
+                        
+                        # Start task in background
+                        asyncio.create_task(run_browser_use_task_background(task))
+                        
+                elif message_type == "browser_use_stop":
+                    if state["browser_use_running"]:
+                        state["browser_use_running"] = False
+                        state["mode"] = "idle"
+                        
+                        # Reset browser session
+                        asyncio.create_task(reset_browser_use_session())
+                        
+                        await manager.broadcast({
+                            "type": "browser_use_status",
                             "status": "stopped"
                         })
                 
@@ -741,10 +912,12 @@ async def get_state():
     return {
         "mode": state["mode"],
         "ai_running": state["ai_running"],
+        "browser_use_running": state["browser_use_running"],
         "task": state["task"],
         "iteration_count": state["iteration_count"],
         "history_length": len(state["history"]),
-        "current_url": page.url if page else None
+        "current_url": page.url if page else None,
+        "cdp_url": cdp_url
     }
 
 
@@ -755,10 +928,10 @@ async def ai_start(request: AITaskRequest):
     Task runs in background and broadcasts progress via WebSocket.
     Returns immediately after starting the task.
     """
-    if state["ai_running"]:
+    if state["ai_running"] or state["browser_use_running"]:
         return {
             "status": "error",
-            "message": "AI task already running. Stop it first with /ai/stop"
+            "message": "Another task is already running. Stop it first."
         }
     
     # Start AI task in background
@@ -785,6 +958,60 @@ async def ai_start(request: AITaskRequest):
     }
 
 
+@app.post("/browser-use/start")
+async def browser_use_start(request: BrowserUseTaskRequest):
+    """Start a browser-use task."""
+    if state["browser_use_running"] or state["ai_running"]:
+        return {
+            "status": "error",
+            "message": "Another task is already running. Stop it first."
+        }
+    
+    if not browser_use_session:
+        return {
+            "status": "error",
+            "message": "Browser-use session not available"
+        }
+    
+    # Start browser-use task
+    state["mode"] = "browser-use"
+    state["task"] = request.task
+    state["browser_use_running"] = True
+    state["iteration_count"] = 0
+    
+    # Broadcast status
+    await manager.broadcast({
+        "type": "browser_use_status",
+        "status": "starting",
+        "task": request.task
+    })
+    
+    # Start task in background
+    asyncio.create_task(run_browser_use_task_background(request.task))
+    
+    return {
+        "status": "started",
+        "task": request.task,
+        "model": BROWSER_USE_MODEL,
+        "message": "Browser-use task started in background."
+    }
+
+
+@app.post("/browser-use/stop")
+async def browser_use_stop():
+    """Stop the currently running browser-use task."""
+    was_running = state["browser_use_running"]
+    
+    state["browser_use_running"] = False
+    state["mode"] = "idle"
+    
+    return {
+        "status": "stopped",
+        "was_running": was_running,
+        "task": state["task"]
+    }
+
+
 @app.post("/ai/stop")
 async def ai_stop():
     """Stop the currently running AI task."""
@@ -808,9 +1035,9 @@ async def ai_execute_streaming(request: AITaskRequest):
     Execute an AI task and stream the progress via Server-Sent Events (SSE).
     Returns real-time updates of AI actions, messages, and status.
     """
-    if state["ai_running"]:
+    if state["ai_running"] or state["browser_use_running"]:
         return StreamingResponse(
-            iter(["data: {\"error\": \"AI task already running\"}\n\n"]),
+            iter(["data: {\"error\": \"Another task is already running\"}\n\n"]),
             media_type="text/event-stream"
         )
     

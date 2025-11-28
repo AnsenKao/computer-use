@@ -13,6 +13,11 @@ services:
       - AZURE_ENDPOINT=https://abscgpt01.cognitiveservices.azure.com/openai/v1/
       - MODEL_DEPLOYMENT=computer-use-preview
       
+      # Browser-use 配置
+      - BROWSER_USE_AZURE_API_KEY=${BROWSER_USE_AZURE_API_KEY}
+      - BROWSER_USE_AZURE_ENDPOINT=${BROWSER_USE_AZURE_ENDPOINT}
+      - BROWSER_USE_MODEL=${BROWSER_USE_MODEL}
+      
       # 顯示配置
       - DISPLAY=:99
       - SCREEN_WIDTH=1920

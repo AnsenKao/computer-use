@@ -192,6 +192,26 @@
             gap: 8px;
         }
         
+        .mode-btn {
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+            border-radius: 4px;
+            color: rgba(255, 255, 255, 0.7);
+            cursor: pointer;
+            transition: all 0.2s ease;
+        }
+        
+        .mode-btn:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
+        }
+        
+        .mode-btn.active {
+            background: rgba(34, 197, 94, 0.8);
+            border-color: rgba(34, 197, 94, 0.8);
+            color: white;
+        }
+        
         #ai-input {
             flex: 1;
             background: rgba(255, 255, 255, 0.1);
@@ -396,6 +416,10 @@
         <div id="ai-panel-content">
             <div id="ai-header">
                 <h3>🤖 AI 助手</h3>
+                <div style="display: flex; gap: 4px; margin-top: 8px;">
+                    <button id="mode-computer-use" class="mode-btn active" style="font-size: 10px; padding: 4px 8px;">Computer Use</button>
+                    <button id="mode-browser-use" class="mode-btn" style="font-size: 10px; padding: 4px 8px;">Browser Use</button>
+                </div>
             </div>
             <div id="ai-messages"></div>
             <div id="ai-input-container">
@@ -427,6 +451,8 @@
         let currentUrl = '';
         let currentMode = 'idle';
         let aiRunning = false;
+        let browserUseRunning = false;
+        let aiMode = 'computer-use'; // 'computer-use' or 'browser-use'
         let isEditingUrl = false;
         
         // 連接 WebSocket
@@ -479,9 +505,18 @@
                     addAIMessage(`🎬 執行動作: ${data.action} (第 ${data.iteration} 次)`, 'system');
                     break;
                     
+                case 'browser_use_status':
+                    handleBrowserUseStatus(data);
+                    break;
+                    
+                case 'browser_use_message':
+                    addAIMessage(data.message, data.status === 'error' ? 'error' : 'assistant');
+                    break;
+                    
                 case 'state':
                     currentMode = data.mode;
                     aiRunning = data.ai_running;
+                    browserUseRunning = data.browser_use_running;
                     updateModeIndicator();
                     break;
             }
@@ -513,7 +548,11 @@
         // 更新模式指示器
         function updateModeIndicator() {
             if (currentMode === 'ai' || aiRunning) {
-                modeIndicator.textContent = '🤖 AI 控制中';
+                modeIndicator.textContent = '🤖 Computer Use 控制中';
+                modeIndicator.className = 'ai';
+                canvas.classList.add('ai-mode');
+            } else if (currentMode === 'browser-use' || browserUseRunning) {
+                modeIndicator.textContent = '🌐 Browser Use 控制中';
                 modeIndicator.className = 'ai';
                 canvas.classList.add('ai-mode');
             } else if (currentMode === 'human') {
@@ -542,6 +581,21 @@
             updateModeIndicator();
         }
         
+        function handleBrowserUseStatus(data) {
+            if (data.status === 'starting') {
+                browserUseRunning = true;
+                aiSend.style.display = 'none';
+                aiStop.classList.add('active');
+                addAIMessage(`🚀 Browser-use 開始執行: ${data.task}`, 'system');
+            } else if (data.status === 'stopped') {
+                browserUseRunning = false;
+                aiSend.style.display = 'block';
+                aiStop.classList.remove('active');
+                addAIMessage('⏹ Browser-use 已停止', 'system');
+            }
+            updateModeIndicator();
+        }
+        
         // 添加 AI 訊息
         function addAIMessage(message, type = 'assistant') {
             const msgDiv = document.createElement('div');
@@ -556,11 +610,21 @@
             const task = aiInput.value.trim();
             if (!task || !ws || ws.readyState !== WebSocket.OPEN) return;
             
+            if (aiRunning || browserUseRunning) return;
+            
             addAIMessage(task, 'user');
-            ws.send(JSON.stringify({
-                type: 'ai_start',
-                task: task
-            }));
+            
+            if (aiMode === 'browser-use') {
+                ws.send(JSON.stringify({
+                    type: 'browser_use_start',
+                    task: task
+                }));
+            } else {
+                ws.send(JSON.stringify({
+                    type: 'ai_start',
+                    task: task
+                }));
+            }
             
             aiInput.value = '';
         }
@@ -569,9 +633,15 @@
         function stopAI() {
             if (!ws || ws.readyState !== WebSocket.OPEN) return;
             
-            ws.send(JSON.stringify({
-                type: 'ai_stop'
-            }));
+            if (browserUseRunning) {
+                ws.send(JSON.stringify({
+                    type: 'browser_use_stop'
+                }));
+            } else {
+                ws.send(JSON.stringify({
+                    type: 'ai_stop'
+                }));
+            }
         }
         
         // 發送操作到後端
@@ -582,7 +652,7 @@
         
         // 滑鼠點擊
         canvas.addEventListener('click', (e) => {
-            if (aiRunning) return; // AI 控制時禁用
+            if (aiRunning || browserUseRunning) return; // AI 控制時禁用
             
             const rect = canvas.getBoundingClientRect();
             const imgAspect = canvas.width / canvas.height;
@@ -653,6 +723,19 @@
         aiStop.addEventListener('click', stopAI);
         aiInput.addEventListener('keypress', (e) => {
             if (e.key === 'Enter') sendAICommand();
+        });
+        
+        // AI 模式切換按鈕事件
+        document.getElementById('mode-computer-use').addEventListener('click', () => {
+            aiMode = 'computer-use';
+            document.getElementById('mode-computer-use').classList.add('active');
+            document.getElementById('mode-browser-use').classList.remove('active');
+        });
+        
+        document.getElementById('mode-browser-use').addEventListener('click', () => {
+            aiMode = 'browser-use';
+            document.getElementById('mode-browser-use').classList.add('active');
+            document.getElementById('mode-computer-use').classList.remove('active');
         });
         
         // AI 面板收縮/展開

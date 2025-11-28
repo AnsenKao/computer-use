@@ -1,34 +1,64 @@
-# AI Computer Use
+# AI Computer Use with Browser-Use Integration
+
+集成了 Azure Computer Use 和 Browser-Use 的智能瀏覽器自動化平台，提供兩種不同的 AI agent 選擇。
+
+## ✨ 特色功能
+
+- **雙 AI Agent 支持**: Computer Use (精確像素控制) + Browser-Use (智能網頁自動化)
+- **共享瀏覽器實例**: 兩個 agent 使用同一個 Chromium 瀏覽器進程
+- **即時 WebSocket 通信**: 實時查看 AI 執行過程
+- **Web 界面**: 直觀的控制面板和狀態監控
+- **Docker 部署**: 一鍵部署，包含所有依賴
+
+## 🤖 AI Agent 比較
+
+| 特性 | Computer Use | Browser-Use |
+|------|-------------|-------------|
+| 控制方式 | 像素級精確控制 | 高級瀏覽器 API |
+| 適用場景 | 複雜視覺任務、非標準界面 | 標準網頁自動化、表單填寫 |
+| 執行速度 | 較慢（需要截圖分析） | 較快（直接 DOM 操作） |
+| 準確性 | 極高（視覺確認） | 高（元素定位） |
+| 模型支持 | Azure Computer Use | OpenAI GPT-4o, Claude 等 |
 
 ## 🚀 快速開始
 
-### Docker 部署
+### Docker 部署 (推薦)
 
 ```bash
-# 1. 設定環境變數
+# 1. 克隆項目
+git clone <your-repo-url>
+cd computer-use
+
+# 2. 設定環境變數
 cp .env.example .env
-# 編輯 .env 填入 Azure API Key
+# 編輯 .env 填入 API Keys:
+# - AZURE_API_KEY (必需，用於 Computer Use)  
+# - OPENAI_API_KEY (可選，用於 Browser-Use)
 
-# 2. 構建映像
-./build.sh
-
-# 3. 啟動服務
+# 3. 構建並啟動服務
 docker-compose up -d
 
-# 訪問: http://localhost:8000
+# 4. 訪問應用
+# WebUI: http://localhost:8000
+# API Docs: http://localhost:8000/docs
 ```
 
 ### 本地開發
 
 ```bash
-# 1. 安裝依賴
+# 1. 創建虛擬環境
+python -m venv .venv
+source .venv/bin/activate  # Windows: .venv\Scripts\activate
+
+# 2. 安裝依賴
 pip install -r requirements.txt
-playwright install chromium
+playwright install chromium --with-deps
 
-# 2. 設定環境變數
-export AZURE_API_KEY=your-key-here
+# 3. 設定環境變數
+export AZURE_API_KEY=your-azure-key-here
+export OPENAI_API_KEY=your-openai-key-here  # 可選
 
-# 3. 啟動服務
+# 4. 啟動服務
 python computer_use_backend.py
 ```
 
