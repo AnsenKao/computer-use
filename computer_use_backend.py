@@ -515,7 +515,7 @@ async def run_browser_use_task_background(task: str):
             azure_deployment=BROWSER_USE_MODEL,  # Azure 部署名稱
             azure_endpoint=BROWSER_USE_AZURE_ENDPOINT,
             api_key=BROWSER_USE_AZURE_API_KEY,
-            api_version="2024-12-01-preview",
+            # api_version="2024-12-01-preview",
             dont_force_structured_output=True  # 避免 JSON schema 錯誤
         )
         
