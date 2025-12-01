@@ -511,6 +511,7 @@ async def run_browser_use_task_background(task: str):
         
         # Initialize LLM with Browser Use Azure OpenAI configuration
         llm = ChatAzureOpenAI(
+            model='gpt-4o',
             azure_deployment=BROWSER_USE_MODEL,  # Azure 部署名稱
             azure_endpoint=BROWSER_USE_AZURE_ENDPOINT,
             api_key=BROWSER_USE_AZURE_API_KEY,
