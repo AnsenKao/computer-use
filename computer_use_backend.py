@@ -156,6 +156,10 @@ class BrowserUseTaskRequest(BaseModel):
     headless: Optional[bool] = False
 
 
+class NavigateRequest(BaseModel):
+    url: str
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Lifespan context manager for startup and shutdown events."""
@@ -919,6 +923,64 @@ async def get_state():
         "current_url": page.url if page else None,
         "cdp_url": cdp_url
     }
+
+
+@app.post("/navigate")
+async def navigate_to_url(request: NavigateRequest):
+    """
+    Navigate to a specific URL.
+    """
+    global page, state
+    
+    if not page:
+        return {
+            "status": "error",
+            "message": "Browser not initialized"
+        }
+    
+    try:
+        # Add protocol if not present
+        url = request.url
+        if not url.startswith(('http://', 'https://', 'about:', 'data:', 'file:')):
+            url = 'https://' + url
+        
+        # Navigate to the URL
+        await page.goto(url, wait_until="domcontentloaded", timeout=30000)
+        
+        # Add to history
+        state["history"].append({
+            "timestamp": time.time(),
+            "action": "navigate",
+            "url": url,
+            "source": "manual"
+        })
+        
+        # Broadcast navigation to WebSocket clients
+        await manager.broadcast({
+            "type": "navigation",
+            "url": page.url,
+            "status": "success"
+        })
+        
+        return {
+            "status": "success",
+            "current_url": page.url,
+            "message": f"Successfully navigated to {page.url}"
+        }
+        
+    except Exception as e:
+        # Broadcast error to WebSocket clients
+        await manager.broadcast({
+            "type": "navigation",
+            "url": request.url,
+            "status": "error",
+            "error": str(e)
+        })
+        
+        return {
+            "status": "error",
+            "message": f"Failed to navigate to {request.url}: {str(e)}"
+        }
 
 
 @app.post("/ai/start")
