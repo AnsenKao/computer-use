@@ -1,5 +1,6 @@
 <!DOCTYPE html>
 <html lang="zh-TW">
+
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -10,13 +11,13 @@
             padding: 0;
             box-sizing: border-box;
         }
-        
+
         body {
             background: #000;
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
-        
+
         #canvas {
             display: block;
             cursor: pointer;
@@ -24,12 +25,12 @@
             height: 100vh;
             object-fit: contain;
         }
-        
+
         #canvas.ai-mode {
             pointer-events: none;
             opacity: 0.9;
         }
-        
+
         /* Status indicators */
         #status {
             position: fixed;
@@ -43,7 +44,7 @@
             backdrop-filter: blur(10px);
             z-index: 1000;
         }
-        
+
         #mode-indicator {
             position: fixed;
             top: 50px;
@@ -57,23 +58,30 @@
             z-index: 1000;
             display: none;
         }
-        
+
         #mode-indicator.human {
             background: rgba(34, 197, 94, 0.8);
             display: block;
         }
-        
+
         #mode-indicator.ai {
             background: rgba(59, 130, 246, 0.8);
             display: block;
             animation: pulse 2s infinite;
         }
-        
+
         @keyframes pulse {
-            0%, 100% { opacity: 1; }
-            50% { opacity: 0.6; }
+
+            0%,
+            100% {
+                opacity: 1;
+            }
+
+            50% {
+                opacity: 0.6;
+            }
         }
-        
+
         /* AI Chat Panel */
         #ai-panel {
             position: fixed;
@@ -81,15 +89,15 @@
             right: 20px;
             z-index: 1000;
         }
-        
+
         #ai-panel:not(.collapsed) {
             width: 400px;
         }
-        
+
         #ai-panel.collapsed {
             width: 50px !important;
         }
-        
+
         #ai-panel-content {
             max-height: 500px;
             background: rgba(0, 0, 0, 0.9);
@@ -99,18 +107,18 @@
             flex-direction: column;
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
         }
-        
+
         #ai-panel.collapsed #ai-panel-content {
             display: none !important;
         }
-        
+
         #ai-panel.collapsed #ai-toggle {
             background: rgba(249, 115, 22, 0.9);
             border: 2px solid rgba(255, 255, 255, 0.3);
             font-weight: bold;
             font-size: 20px;
         }
-        
+
         #ai-header {
             padding: 12px 16px;
             padding-right: 60px;
@@ -119,13 +127,13 @@
             justify-content: space-between;
             align-items: center;
         }
-        
+
         #ai-header h3 {
             color: white;
             font-size: 14px;
             font-weight: 600;
         }
-        
+
         #ai-toggle {
             position: absolute;
             top: 50%;
@@ -141,19 +149,19 @@
             transition: all 0.2s;
             z-index: 1001;
         }
-        
+
         #ai-toggle:hover {
             background: rgba(59, 130, 246, 0.5);
             transform: translateY(-50%) scale(1.05);
         }
-        
+
         #ai-messages {
             flex: 1;
             overflow-y: auto;
             padding: 12px;
             max-height: 350px;
         }
-        
+
         .ai-message {
             margin-bottom: 12px;
             padding: 8px 12px;
@@ -161,37 +169,37 @@
             font-size: 13px;
             line-height: 1.5;
         }
-        
+
         .ai-message.user {
             background: rgba(59, 130, 246, 0.2);
             color: #93c5fd;
             text-align: right;
         }
-        
+
         .ai-message.assistant {
             background: rgba(34, 197, 94, 0.2);
             color: #86efac;
         }
-        
+
         .ai-message.system {
             background: rgba(156, 163, 175, 0.2);
             color: #d1d5db;
             font-size: 11px;
             text-align: center;
         }
-        
+
         .ai-message.error {
             background: rgba(239, 68, 68, 0.2);
             color: #fca5a5;
         }
-        
+
         #ai-input-container {
             padding: 12px;
             border-top: 1px solid rgba(255, 255, 255, 0.1);
             display: flex;
             gap: 8px;
         }
-        
+
         .mode-btn {
             background: rgba(255, 255, 255, 0.1);
             border: 1px solid rgba(255, 255, 255, 0.2);
@@ -200,18 +208,18 @@
             cursor: pointer;
             transition: all 0.2s ease;
         }
-        
+
         .mode-btn:hover {
             background: rgba(255, 255, 255, 0.2);
             color: white;
         }
-        
+
         .mode-btn.active {
             background: rgba(34, 197, 94, 0.8);
             border-color: rgba(34, 197, 94, 0.8);
             color: white;
         }
-        
+
         #ai-input {
             flex: 1;
             background: rgba(255, 255, 255, 0.1);
@@ -222,17 +230,18 @@
             font-size: 13px;
             outline: none;
         }
-        
+
         #ai-input::placeholder {
             color: rgba(255, 255, 255, 0.4);
         }
-        
+
         #ai-input:focus {
             border-color: rgba(59, 130, 246, 0.5);
             background: rgba(255, 255, 255, 0.15);
         }
-        
-        #ai-send, #ai-stop {
+
+        #ai-send,
+        #ai-stop {
             background: rgba(59, 130, 246, 0.8);
             border: none;
             border-radius: 6px;
@@ -242,46 +251,46 @@
             cursor: pointer;
             transition: background 0.2s;
         }
-        
+
         #ai-send:hover {
             background: rgba(59, 130, 246, 1);
         }
-        
+
         #ai-stop {
             background: rgba(239, 68, 68, 0.8);
             display: none;
         }
-        
+
         #ai-stop:hover {
             background: rgba(239, 68, 68, 1);
         }
-        
+
         #ai-stop.active {
             display: block;
         }
-        
+
         .connected {
             color: #4ade80;
         }
-        
+
         .disconnected {
             color: #f87171;
         }
-        
+
         /* Minimize/Maximize */
         #ai-panel.minimized #ai-messages,
         #ai-panel.minimized #ai-input-container {
             display: none;
         }
-        
+
         #ai-panel.minimized {
             max-height: 50px;
         }
-        
+
         #ai-header {
             flex-shrink: 0;
         }
-        
+
         /* URL Control Panel */
         #url-control {
             position: fixed;
@@ -289,11 +298,11 @@
             left: 10px;
             z-index: 1000;
         }
-        
+
         #url-control:not(.collapsed) {
             max-width: 600px;
         }
-        
+
         #url-control-content {
             background: rgba(0, 0, 0, 0.8);
             backdrop-filter: blur(10px);
@@ -303,16 +312,16 @@
             gap: 6px;
             align-items: center;
         }
-        
+
         #url-control.collapsed {
             width: 40px !important;
             max-width: 40px !important;
         }
-        
+
         #url-control.collapsed #url-control-content {
             display: none !important;
         }
-        
+
         #url-toggle {
             position: absolute;
             left: 0;
@@ -329,16 +338,16 @@
             box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
             z-index: 1001;
         }
-        
+
         #url-toggle:hover {
             background: rgba(249, 115, 22, 1);
             transform: scale(1.05);
         }
-        
+
         #url-control-content {
             margin-left: 52px;
         }
-        
+
         #url-control button {
             background: rgba(59, 130, 246, 0.8);
             border: none;
@@ -350,21 +359,22 @@
             transition: background 0.2s;
             min-width: 36px;
         }
-        
+
         #url-control button:hover:not(:disabled) {
             background: rgba(59, 130, 246, 1);
         }
-        
+
         #url-control button:disabled {
             background: rgba(100, 100, 100, 0.5);
             cursor: not-allowed;
             opacity: 0.5;
         }
-        
-        #btn-back, #btn-forward {
+
+        #btn-back,
+        #btn-forward {
             font-weight: bold;
         }
-        
+
         #url-input {
             flex: 1;
             background: rgba(255, 255, 255, 0.1);
@@ -376,30 +386,80 @@
             outline: none;
             min-width: 300px;
         }
-        
+
         #url-input::placeholder {
             color: rgba(255, 255, 255, 0.4);
         }
-        
+
         #url-input:focus {
             border-color: rgba(59, 130, 246, 0.5);
             background: rgba(255, 255, 255, 0.15);
         }
-        
+
         #btn-go {
             background: rgba(34, 197, 94, 0.8);
         }
-        
+
         #btn-go:hover {
             background: rgba(34, 197, 94, 1);
         }
+
+        #btn-go:hover {
+            background: rgba(34, 197, 94, 1);
+        }
+
+        #emergency-stop {
+            position: fixed;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(239, 68, 68, 0.9);
+            color: white;
+            border: 2px solid white;
+            padding: 12px 32px;
+            border-radius: 50px;
+            font-size: 18px;
+            font-weight: bold;
+            cursor: pointer;
+            z-index: 2000;
+            display: none;
+            box-shadow: 0 4px 15px rgba(220, 38, 38, 0.5);
+            animation: pulse-red 2s infinite;
+            text-transform: uppercase;
+            letter-spacing: 1px;
+            backdrop-filter: blur(5px);
+        }
+
+        #emergency-stop:hover {
+            background: rgba(220, 38, 38, 1);
+            transform: translateX(-50%) scale(1.05);
+        }
+
+        #emergency-stop:active {
+            transform: translateX(-50%) scale(0.95);
+        }
+
+        @keyframes pulse-red {
+            0% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+            }
+
+            70% {
+                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+            }
+
+            100% {
+                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+            }
+        }
     </style>
 </head>
+
 <body>
     <canvas id="canvas"></canvas>
     <div id="status" class="disconnected">🔴 未連接</div>
     <div id="mode-indicator">👤 人類控制</div>
-    
+
     <!-- URL Control Panel -->
     <div id="url-control">
         <button id="url-toggle" title="收縮/展開">☰</button>
@@ -407,400 +467,417 @@
             <button id="btn-back" title="上一頁">◀</button>
             <button id="btn-forward" title="下一頁">▶</button>
             <input type="text" id="url-input" placeholder="輸入網址後按 Enter (例如: https://www.google.com)" />
-        </div>
-    </div>
-    
-    <!-- AI Chat Panel -->
-    <div id="ai-panel">
-        <button id="ai-toggle">−</button>
-        <div id="ai-panel-content">
-            <div id="ai-header">
-                <h3>🤖 AI 助手</h3>
-                <div style="display: flex; gap: 4px; margin-top: 8px;">
-                    <button id="mode-computer-use" class="mode-btn active" style="font-size: 10px; padding: 4px 8px;">Computer Use</button>
-                    <button id="mode-browser-use" class="mode-btn" style="font-size: 10px; padding: 4px 8px;">Browser Use</button>
+
+
+            <button id="emergency-stop">🛑 強制停止</button>
+
+            <!-- AI Chat Panel -->
+            <div id="ai-panel">
+                <button id="ai-toggle">−</button>
+                <div id="ai-panel-content">
+                    <div id="ai-header">
+                        <h3>🤖 AI 助手</h3>
+                        <div style="display: flex; gap: 4px; margin-top: 8px;">
+                            <button id="mode-computer-use" class="mode-btn active"
+                                style="font-size: 10px; padding: 4px 8px;">Computer Use</button>
+                            <button id="mode-browser-use" class="mode-btn"
+                                style="font-size: 10px; padding: 4px 8px;">Browser Use</button>
+                        </div>
+                    </div>
+                    <div id="ai-messages"></div>
+                    <div id="ai-input-container">
+                        <input type="text" id="ai-input" placeholder="輸入 AI 指令...（例如：搜尋台灣天氣）" />
+                        <button id="ai-send">發送</button>
+                        <button id="ai-stop">停止</button>
+                    </div>
                 </div>
             </div>
-            <div id="ai-messages"></div>
-            <div id="ai-input-container">
-                <input type="text" id="ai-input" placeholder="輸入 AI 指令...（例如：搜尋台灣天氣）" />
-                <button id="ai-send">發送</button>
-                <button id="ai-stop">停止</button>
-            </div>
-        </div>
-    </div>
 
-    <script>
-        const canvas = document.getElementById('canvas');
-        const ctx = canvas.getContext('2d');
-        const statusEl = document.getElementById('status');
-        const modeIndicator = document.getElementById('mode-indicator');
-        const aiPanel = document.getElementById('ai-panel');
-        const aiMessages = document.getElementById('ai-messages');
-        const aiInput = document.getElementById('ai-input');
-        const aiSend = document.getElementById('ai-send');
-        const aiStop = document.getElementById('ai-stop');
-        const aiToggle = document.getElementById('ai-toggle');
-        const urlInput = document.getElementById('url-input');
-        const btnBack = document.getElementById('btn-back');
-        const btnForward = document.getElementById('btn-forward');
-        const urlToggle = document.getElementById('url-toggle');
-        const urlControl = document.getElementById('url-control');
-        
-        let ws = null;
-        let currentUrl = '';
-        let currentMode = 'idle';
-        let aiRunning = false;
-        let browserUseRunning = false;
-        let aiMode = 'computer-use'; // 'computer-use' or 'browser-use'
-        let isEditingUrl = false;
-        
-        // 連接 WebSocket
-        function connect() {
-            const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
-            const host = window.location.host || 'localhost:8000';
-            ws = new WebSocket(`${protocol}//${host}/ws/screenshot`);
-            
-            ws.onopen = () => {
-                console.log('✅ WebSocket 已連接');
-                statusEl.textContent = '🟢 已連接';
-                statusEl.className = 'connected';
-            };
-            
-            ws.onclose = () => {
-                console.log('❌ WebSocket 已斷線');
-                statusEl.textContent = '🔴 未連接';
-                statusEl.className = 'disconnected';
-                
-                // 3 秒後自動重連
-                setTimeout(connect, 3000);
-            };
-            
-            ws.onerror = (error) => {
-                console.error('WebSocket 錯誤:', error);
-            };
-            
-            ws.onmessage = (event) => {
-                const data = JSON.parse(event.data);
-                handleWebSocketMessage(data);
-            };
-        }
-        
-        // 處理 WebSocket 訊息
-        function handleWebSocketMessage(data) {
-            switch(data.type) {
-                case 'screenshot':
-                    updateCanvas(data);
-                    break;
-                    
-                case 'ai_status':
-                    handleAIStatus(data);
-                    break;
-                    
-                case 'ai_message':
-                    addAIMessage(data.message, 'assistant');
-                    break;
-                    
-                case 'ai_action':
-                    addAIMessage(`🎬 執行動作: ${data.action} (第 ${data.iteration} 次)`, 'system');
-                    break;
-                    
-                case 'browser_use_status':
-                    handleBrowserUseStatus(data);
-                    break;
-                    
-                case 'browser_use_message':
-                    addAIMessage(data.message, data.status === 'error' ? 'error' : 'assistant');
-                    break;
-                    
-                case 'state':
-                    currentMode = data.mode;
-                    aiRunning = data.ai_running;
-                    browserUseRunning = data.browser_use_running;
-                    updateModeIndicator();
-                    break;
-            }
-        }
-        
-        // 更新 Canvas
-        function updateCanvas(data) {
-            const img = new Image();
-            img.onload = () => {
-                canvas.width = data.width;
-                canvas.height = data.height;
-                ctx.clearRect(0, 0, canvas.width, canvas.height);
-                ctx.drawImage(img, 0, 0, data.width, data.height);
-                
-                if (data.url) {
-                    currentUrl = data.url;
-                    // 只在用戶沒有編輯時更新 URL 輸入框
-                    if (!isEditingUrl) {
-                        urlInput.value = data.url;
+            <script>
+                const canvas = document.getElementById('canvas');
+                const ctx = canvas.getContext('2d');
+                const statusEl = document.getElementById('status');
+                const modeIndicator = document.getElementById('mode-indicator');
+                const aiPanel = document.getElementById('ai-panel');
+                const aiMessages = document.getElementById('ai-messages');
+                const aiInput = document.getElementById('ai-input');
+                const aiSend = document.getElementById('ai-send');
+                const aiStop = document.getElementById('ai-stop');
+                const aiToggle = document.getElementById('ai-toggle');
+                const urlInput = document.getElementById('url-input');
+                const btnBack = document.getElementById('btn-back');
+                const btnForward = document.getElementById('btn-forward');
+                const urlToggle = document.getElementById('url-toggle');
+                const urlControl = document.getElementById('url-control');
+                const emergencyStopBtn = document.getElementById('emergency-stop');
+
+                let ws = null;
+                let currentUrl = '';
+                let currentMode = 'idle';
+                let aiRunning = false;
+                let browserUseRunning = false;
+                let aiMode = 'computer-use'; // 'computer-use' or 'browser-use'
+                let isEditingUrl = false;
+
+                // 連接 WebSocket
+                function connect() {
+                    const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+                    const host = window.location.host || 'localhost:8000';
+                    ws = new WebSocket(`${protocol}//${host}/ws/screenshot`);
+
+                    ws.onopen = () => {
+                        console.log('✅ WebSocket 已連接');
+                        statusEl.textContent = '🟢 已連接';
+                        statusEl.className = 'connected';
+                    };
+
+                    ws.onclose = () => {
+                        console.log('❌ WebSocket 已斷線');
+                        statusEl.textContent = '🔴 未連接';
+                        statusEl.className = 'disconnected';
+
+                        // 3 秒後自動重連
+                        setTimeout(connect, 3000);
+                    };
+
+                    ws.onerror = (error) => {
+                        console.error('WebSocket 錯誤:', error);
+                    };
+
+                    ws.onmessage = (event) => {
+                        const data = JSON.parse(event.data);
+                        handleWebSocketMessage(data);
+                    };
+                }
+
+                // 處理 WebSocket 訊息
+                function handleWebSocketMessage(data) {
+                    switch (data.type) {
+                        case 'screenshot':
+                            updateCanvas(data);
+                            break;
+
+                        case 'ai_status':
+                            handleAIStatus(data);
+                            break;
+
+                        case 'ai_message':
+                            addAIMessage(data.message, 'assistant');
+                            break;
+
+                        case 'ai_action':
+                            addAIMessage(`🎬 執行動作: ${data.action} (第 ${data.iteration} 次)`, 'system');
+                            break;
+
+                        case 'browser_use_status':
+                            handleBrowserUseStatus(data);
+                            break;
+
+                        case 'browser_use_message':
+                            addAIMessage(data.message, data.status === 'error' ? 'error' : 'assistant');
+                            break;
+
+                        case 'state':
+                            currentMode = data.mode;
+                            aiRunning = data.ai_running;
+                            browserUseRunning = data.browser_use_running;
+                            updateModeIndicator();
+                            break;
                     }
                 }
-                
-                currentMode = data.mode;
-                updateModeIndicator();
-            };
-            img.src = 'data:image/png;base64,' + data.image;
-        }
-        
-        // 更新模式指示器
-        function updateModeIndicator() {
-            if (currentMode === 'ai' || aiRunning) {
-                modeIndicator.textContent = '🤖 Computer Use 控制中';
-                modeIndicator.className = 'ai';
-                canvas.classList.add('ai-mode');
-            } else if (currentMode === 'browser-use' || browserUseRunning) {
-                modeIndicator.textContent = '🌐 Browser Use 控制中';
-                modeIndicator.className = 'ai';
-                canvas.classList.add('ai-mode');
-            } else if (currentMode === 'human') {
-                modeIndicator.textContent = '👤 人類控制';
-                modeIndicator.className = 'human';
-                canvas.classList.remove('ai-mode');
-            } else {
-                modeIndicator.style.display = 'none';
-                canvas.classList.remove('ai-mode');
-            }
-        }
-        
-        // 處理 AI 狀態
-        function handleAIStatus(data) {
-            if (data.status === 'starting') {
-                aiRunning = true;
-                aiSend.style.display = 'none';
-                aiStop.classList.add('active');
-                addAIMessage(`🚀 開始執行: ${data.task}`, 'system');
-            } else if (data.status === 'stopped') {
-                aiRunning = false;
-                aiSend.style.display = 'block';
-                aiStop.classList.remove('active');
-                addAIMessage('⏹ AI 已停止', 'system');
-            }
-            updateModeIndicator();
-        }
-        
-        function handleBrowserUseStatus(data) {
-            if (data.status === 'starting') {
-                browserUseRunning = true;
-                aiSend.style.display = 'none';
-                aiStop.classList.add('active');
-                addAIMessage(`🚀 Browser-use 開始執行: ${data.task}`, 'system');
-            } else if (data.status === 'stopped') {
-                browserUseRunning = false;
-                aiSend.style.display = 'block';
-                aiStop.classList.remove('active');
-                addAIMessage('⏹ Browser-use 已停止', 'system');
-            }
-            updateModeIndicator();
-        }
-        
-        // 添加 AI 訊息
-        function addAIMessage(message, type = 'assistant') {
-            const msgDiv = document.createElement('div');
-            msgDiv.className = `ai-message ${type}`;
-            msgDiv.textContent = message;
-            aiMessages.appendChild(msgDiv);
-            aiMessages.scrollTop = aiMessages.scrollHeight;
-        }
-        
-        // 發送 AI 指令
-        function sendAICommand() {
-            const task = aiInput.value.trim();
-            if (!task || !ws || ws.readyState !== WebSocket.OPEN) return;
-            
-            if (aiRunning || browserUseRunning) return;
-            
-            addAIMessage(task, 'user');
-            
-            if (aiMode === 'browser-use') {
-                ws.send(JSON.stringify({
-                    type: 'browser_use_start',
-                    task: task
-                }));
-            } else {
-                ws.send(JSON.stringify({
-                    type: 'ai_start',
-                    task: task
-                }));
-            }
-            
-            aiInput.value = '';
-        }
-        
-        // 停止 AI
-        function stopAI() {
-            if (!ws || ws.readyState !== WebSocket.OPEN) return;
-            
-            if (browserUseRunning) {
-                ws.send(JSON.stringify({
-                    type: 'browser_use_stop'
-                }));
-            } else {
-                ws.send(JSON.stringify({
-                    type: 'ai_stop'
-                }));
-            }
-        }
-        
-        // 發送操作到後端
-        function sendAction(type, data) {
-            if (!ws || ws.readyState !== WebSocket.OPEN) return;
-            ws.send(JSON.stringify({ type, ...data }));
-        }
-        
-        // 滑鼠點擊
-        canvas.addEventListener('click', (e) => {
-            if (aiRunning || browserUseRunning) return; // AI 控制時禁用
-            
-            const rect = canvas.getBoundingClientRect();
-            const imgAspect = canvas.width / canvas.height;
-            const viewAspect = rect.width / rect.height;
-            
-            let displayWidth, displayHeight, offsetX, offsetY;
-            
-            if (viewAspect > imgAspect) {
-                displayHeight = rect.height;
-                displayWidth = rect.height * imgAspect;
-                offsetX = (rect.width - displayWidth) / 2;
-                offsetY = 0;
-            } else {
-                displayWidth = rect.width;
-                displayHeight = rect.width / imgAspect;
-                offsetX = 0;
-                offsetY = (rect.height - displayHeight) / 2;
-            }
-            
-            const clickX = e.clientX - rect.left - offsetX;
-            const clickY = e.clientY - rect.top - offsetY;
-            
-            if (clickX < 0 || clickX > displayWidth || clickY < 0 || clickY > displayHeight) {
-                return;
-            }
-            
-            const x = Math.round((clickX / displayWidth) * canvas.width);
-            const y = Math.round((clickY / displayHeight) * canvas.height);
-            
-            console.log(`點擊: (${x}, ${y})`);
-            sendAction('click', { x, y });
-        });
-        
-        // 鍵盤事件
-        document.addEventListener('keydown', (e) => {
-            // 如果焦點在輸入框，不攔截
-            if (document.activeElement === aiInput || document.activeElement === urlInput) return;
-            
-            // 允許 F5 和 F12
-            if (e.key === 'F5' || e.key === 'F12') return;
-            
-            // AI 控制時禁用
-            if (aiRunning) {
-                e.preventDefault();
-                return;
-            }
-            
-            e.preventDefault();
-            
-            sendAction('keypress', {
-                key: e.key,
-                ctrl: e.ctrlKey || e.metaKey,
-                shift: e.shiftKey,
-                alt: e.altKey
-            });
-        });
-        
-        // 滾輪滾動
-        canvas.addEventListener('wheel', (e) => {
-            if (aiRunning) return; // AI 控制時禁用
-            
-            e.preventDefault();
-            sendAction('scroll', { deltaY: e.deltaY });
-        }, { passive: false });
-        
-        // AI 輸入事件
-        aiSend.addEventListener('click', sendAICommand);
-        aiStop.addEventListener('click', stopAI);
-        aiInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') sendAICommand();
-        });
-        
-        // AI 模式切換按鈕事件
-        document.getElementById('mode-computer-use').addEventListener('click', () => {
-            aiMode = 'computer-use';
-            document.getElementById('mode-computer-use').classList.add('active');
-            document.getElementById('mode-browser-use').classList.remove('active');
-        });
-        
-        document.getElementById('mode-browser-use').addEventListener('click', () => {
-            aiMode = 'browser-use';
-            document.getElementById('mode-browser-use').classList.add('active');
-            document.getElementById('mode-computer-use').classList.remove('active');
-        });
-        
-        // AI 面板收縮/展開
-        aiToggle.addEventListener('click', () => {
-            aiPanel.classList.toggle('collapsed');
-            aiToggle.textContent = aiPanel.classList.contains('collapsed') ? '▶' : '−';
-        });
-        
-        // URL 控制功能
-        function navigateToUrl() {
-            const url = urlInput.value.trim();
-            if (!url || !ws || ws.readyState !== WebSocket.OPEN) return;
-            
-            // 自動添加 https:// 如果沒有協議
-            let fullUrl = url;
-            if (!url.startsWith('http://') && !url.startsWith('https://')) {
-                fullUrl = 'https://' + url;
-            }
-            
-            ws.send(JSON.stringify({
-                type: 'navigate',
-                url: fullUrl
-            }));
-            
-            // 移除焦點
-            urlInput.blur();
-        }
-        
-        function goBack() {
-            if (!ws || ws.readyState !== WebSocket.OPEN) return;
-            ws.send(JSON.stringify({ type: 'back' }));
-        }
-        
-        function goForward() {
-            if (!ws || ws.readyState !== WebSocket.OPEN) return;
-            ws.send(JSON.stringify({ type: 'forward' }));
-        }
-        
-        // 追蹤 URL 輸入框編輯狀態
-        urlInput.addEventListener('focus', () => {
-            isEditingUrl = true;
-        });
-        urlInput.addEventListener('blur', () => {
-            isEditingUrl = false;
-        });
-        urlInput.addEventListener('keypress', (e) => {
-            if (e.key === 'Enter') {
-                navigateToUrl();
-            }
-        });
-        btnBack.addEventListener('click', goBack);
-        btnForward.addEventListener('click', goForward);
-        
-        // URL 控制面板收縮/展開
-        urlToggle.addEventListener('click', () => {
-            urlControl.classList.toggle('collapsed');
-            urlToggle.textContent = urlControl.classList.contains('collapsed') ? '▶' : '☰';
-        });
-        
-        // 啟動連接
-        connect();
-        
-        // 自動聚焦 Canvas
-        canvas.focus();
-        canvas.setAttribute('tabindex', '0');
-    </script>
+
+                // 更新 Canvas
+                function updateCanvas(data) {
+                    const img = new Image();
+                    img.onload = () => {
+                        canvas.width = data.width;
+                        canvas.height = data.height;
+                        ctx.clearRect(0, 0, canvas.width, canvas.height);
+                        ctx.drawImage(img, 0, 0, data.width, data.height);
+
+                        if (data.url) {
+                            currentUrl = data.url;
+                            // 只在用戶沒有編輯時更新 URL 輸入框
+                            if (!isEditingUrl) {
+                                urlInput.value = data.url;
+                            }
+                        }
+
+                        currentMode = data.mode;
+                        updateModeIndicator();
+                    };
+                    img.src = 'data:image/png;base64,' + data.image;
+                }
+
+                // 更新模式指示器
+                function updateModeIndicator() {
+                    if (currentMode === 'ai' || aiRunning) {
+                        modeIndicator.textContent = '🤖 Computer Use 控制中';
+                        modeIndicator.className = 'ai';
+                        canvas.classList.add('ai-mode');
+                    } else if (currentMode === 'browser-use' || browserUseRunning) {
+                        modeIndicator.textContent = '🌐 Browser Use 控制中';
+                        modeIndicator.className = 'ai';
+                        canvas.classList.add('ai-mode');
+                    } else if (currentMode === 'human') {
+                        modeIndicator.textContent = '👤 人類控制';
+                        modeIndicator.className = 'human';
+                        canvas.classList.remove('ai-mode');
+                    } else {
+                        modeIndicator.style.display = 'none';
+                        canvas.classList.remove('ai-mode');
+                    }
+                }
+
+
+
+                // 處理 AI 狀態
+                function handleAIStatus(data) {
+                    if (data.status === 'starting') {
+                        aiRunning = true;
+                        aiSend.style.display = 'none';
+                        aiStop.classList.add('active');
+                        emergencyStopBtn.style.display = 'block';
+                        addAIMessage(`🚀 開始執行: ${data.task}`, 'system');
+                    } else if (data.status === 'stopped') {
+                        aiRunning = false;
+                        aiSend.style.display = 'block';
+                        aiStop.classList.remove('active');
+                        emergencyStopBtn.style.display = 'none';
+                        addAIMessage('⏹ AI 已停止', 'system');
+                    }
+                    updateModeIndicator();
+                }
+
+                function handleBrowserUseStatus(data) {
+                    if (data.status === 'starting') {
+                        browserUseRunning = true;
+                        aiSend.style.display = 'none';
+                        aiStop.classList.add('active');
+                        emergencyStopBtn.style.display = 'block';
+                        addAIMessage(`🚀 Browser-use 開始執行: ${data.task}`, 'system');
+                    } else if (data.status === 'stopped') {
+                        browserUseRunning = false;
+                        aiSend.style.display = 'block';
+                        aiStop.classList.remove('active');
+                        emergencyStopBtn.style.display = 'none';
+                        addAIMessage('⏹ Browser-use 已停止', 'system');
+                    }
+                    updateModeIndicator();
+                }
+
+                // 添加 AI 訊息
+                function addAIMessage(message, type = 'assistant') {
+                    const msgDiv = document.createElement('div');
+                    msgDiv.className = `ai-message ${type}`;
+                    msgDiv.textContent = message;
+                    aiMessages.appendChild(msgDiv);
+                    aiMessages.scrollTop = aiMessages.scrollHeight;
+                }
+
+                // 發送 AI 指令
+                function sendAICommand() {
+                    const task = aiInput.value.trim();
+                    if (!task || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+                    if (aiRunning || browserUseRunning) return;
+
+                    addAIMessage(task, 'user');
+
+                    if (aiMode === 'browser-use') {
+                        ws.send(JSON.stringify({
+                            type: 'browser_use_start',
+                            task: task
+                        }));
+                    } else {
+                        ws.send(JSON.stringify({
+                            type: 'ai_start',
+                            task: task
+                        }));
+                    }
+
+                    aiInput.value = '';
+                }
+
+                // 停止 AI
+                function stopAI() {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+                    if (browserUseRunning) {
+                        ws.send(JSON.stringify({
+                            type: 'browser_use_stop'
+                        }));
+                    } else {
+                        ws.send(JSON.stringify({
+                            type: 'ai_stop'
+                        }));
+                    }
+                }
+
+                // 發送操作到後端
+                function sendAction(type, data) {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    ws.send(JSON.stringify({ type, ...data }));
+                }
+
+                // 滑鼠點擊
+                canvas.addEventListener('click', (e) => {
+                    if (aiRunning || browserUseRunning) return; // AI 控制時禁用
+
+                    const rect = canvas.getBoundingClientRect();
+                    const imgAspect = canvas.width / canvas.height;
+                    const viewAspect = rect.width / rect.height;
+
+                    let displayWidth, displayHeight, offsetX, offsetY;
+
+                    if (viewAspect > imgAspect) {
+                        displayHeight = rect.height;
+                        displayWidth = rect.height * imgAspect;
+                        offsetX = (rect.width - displayWidth) / 2;
+                        offsetY = 0;
+                    } else {
+                        displayWidth = rect.width;
+                        displayHeight = rect.width / imgAspect;
+                        offsetX = 0;
+                        offsetY = (rect.height - displayHeight) / 2;
+                    }
+
+                    const clickX = e.clientX - rect.left - offsetX;
+                    const clickY = e.clientY - rect.top - offsetY;
+
+                    if (clickX < 0 || clickX > displayWidth || clickY < 0 || clickY > displayHeight) {
+                        return;
+                    }
+
+                    const x = Math.round((clickX / displayWidth) * canvas.width);
+                    const y = Math.round((clickY / displayHeight) * canvas.height);
+
+                    console.log(`點擊: (${x}, ${y})`);
+                    sendAction('click', { x, y });
+                });
+
+                // 鍵盤事件
+                document.addEventListener('keydown', (e) => {
+                    // 如果焦點在輸入框，不攔截
+                    if (document.activeElement === aiInput || document.activeElement === urlInput) return;
+
+                    // 允許 F5 和 F12
+                    if (e.key === 'F5' || e.key === 'F12') return;
+
+                    // AI 控制時禁用
+                    if (aiRunning) {
+                        e.preventDefault();
+                        return;
+                    }
+
+                    e.preventDefault();
+
+                    sendAction('keypress', {
+                        key: e.key,
+                        ctrl: e.ctrlKey || e.metaKey,
+                        shift: e.shiftKey,
+                        alt: e.altKey
+                    });
+                });
+
+                // 滾輪滾動
+                canvas.addEventListener('wheel', (e) => {
+                    if (aiRunning) return; // AI 控制時禁用
+
+                    e.preventDefault();
+                    sendAction('scroll', { deltaY: e.deltaY });
+                }, { passive: false });
+
+                // AI 輸入事件
+                aiSend.addEventListener('click', sendAICommand);
+                aiStop.addEventListener('click', stopAI);
+                aiInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') sendAICommand();
+                });
+
+                // AI 模式切換按鈕事件
+                document.getElementById('mode-computer-use').addEventListener('click', () => {
+                    aiMode = 'computer-use';
+                    document.getElementById('mode-computer-use').classList.add('active');
+                    document.getElementById('mode-browser-use').classList.remove('active');
+                });
+
+                document.getElementById('mode-browser-use').addEventListener('click', () => {
+                    aiMode = 'browser-use';
+                    document.getElementById('mode-browser-use').classList.add('active');
+                    document.getElementById('mode-computer-use').classList.remove('active');
+                });
+
+                // AI 面板收縮/展開
+                aiToggle.addEventListener('click', () => {
+                    aiPanel.classList.toggle('collapsed');
+                    aiToggle.textContent = aiPanel.classList.contains('collapsed') ? '▶' : '−';
+                });
+
+                // URL 控制功能
+                function navigateToUrl() {
+                    const url = urlInput.value.trim();
+                    if (!url || !ws || ws.readyState !== WebSocket.OPEN) return;
+
+                    // 自動添加 https:// 如果沒有協議
+                    let fullUrl = url;
+                    if (!url.startsWith('http://') && !url.startsWith('https://')) {
+                        fullUrl = 'https://' + url;
+                    }
+
+                    ws.send(JSON.stringify({
+                        type: 'navigate',
+                        url: fullUrl
+                    }));
+
+                    // 移除焦點
+                    urlInput.blur();
+                }
+
+                function goBack() {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    ws.send(JSON.stringify({ type: 'back' }));
+                }
+
+                function goForward() {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+                    ws.send(JSON.stringify({ type: 'forward' }));
+                }
+
+                // 追蹤 URL 輸入框編輯狀態
+                urlInput.addEventListener('focus', () => {
+                    isEditingUrl = true;
+                });
+                urlInput.addEventListener('blur', () => {
+                    isEditingUrl = false;
+                });
+                urlInput.addEventListener('keypress', (e) => {
+                    if (e.key === 'Enter') {
+                        navigateToUrl();
+                    }
+                });
+                btnBack.addEventListener('click', goBack);
+                btnForward.addEventListener('click', goForward);
+
+                // URL 控制面板收縮/展開
+                urlToggle.addEventListener('click', () => {
+                    urlControl.classList.toggle('collapsed');
+                    urlToggle.textContent = urlControl.classList.contains('collapsed') ? '▶' : '☰';
+                });
+
+                // 強制停止按鈕
+                emergencyStopBtn.addEventListener('click', () => {
+                    console.log("🛑 用戶點擊強制停止");
+                    stopAI();
+                });
+
+                // 啟動連接
+                connect();
+
+                // 自動聚焦 Canvas
+                canvas.focus();
+                canvas.setAttribute('tabindex', '0');
+            </script>
 </body>
+
 </html>
