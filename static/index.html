@@ -6,6 +6,18 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>AI Computer Use - 遠端瀏覽器控制</title>
     <style>
+        :root {
+            --glass-bg: rgba(20, 20, 20, 0.6);
+            --glass-border: rgba(255, 255, 255, 0.1);
+            --glass-blur: 16px;
+            --primary-color: #3b82f6;
+            --primary-hover: #2563eb;
+            --danger-color: #ef4444;
+            --danger-hover: #dc2626;
+            --text-color: #f3f4f6;
+            --text-secondary: #9ca3af;
+        }
+
         * {
             margin: 0;
             padding: 0;
@@ -13,488 +25,518 @@
         }
 
         body {
-            background: #000;
+            background: #0d0d0d;
             overflow: hidden;
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: var(--text-color);
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #canvas-container {
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            overflow: hidden;
+            background: radial-gradient(circle at center, #1a1a1a 0%, #000 100%);
         }
 
         #canvas {
             display: block;
-            cursor: pointer;
-            width: 100vw;
-            height: 100vh;
+            cursor: crosshair;
+            max-width: 100%;
+            max-height: 100%;
             object-fit: contain;
+            box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
+            transition: opacity 0.3s;
+            transform-origin: center center;
         }
 
         #canvas.ai-mode {
             pointer-events: none;
-            opacity: 0.9;
+            opacity: 0.8;
+            filter: grayscale(0.5);
+        }
+
+        /* Glassmorphism Common */
+        .glass-panel {
+            background: var(--glass-bg);
+            backdrop-filter: blur(var(--glass-blur));
+            -webkit-backdrop-filter: blur(var(--glass-blur));
+            border: 1px solid var(--glass-border);
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.4);
+            border-radius: 12px;
+            transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
         /* Status indicators */
-        #status {
+        #status-bar {
             position: fixed;
-            top: 10px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 6px;
-            font-size: 12px;
-            backdrop-filter: blur(10px);
+            top: 20px;
+            right: 20px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            align-items: flex-end;
             z-index: 1000;
         }
 
-        #mode-indicator {
-            position: fixed;
-            top: 50px;
-            right: 10px;
-            background: rgba(0, 0, 0, 0.8);
-            color: white;
-            padding: 8px 16px;
-            border-radius: 6px;
+        .status-badge {
+            padding: 6px 12px;
+            border-radius: 20px;
             font-size: 12px;
-            backdrop-filter: blur(10px);
-            z-index: 1000;
-            display: none;
-        }
-
-        #mode-indicator.human {
-            background: rgba(34, 197, 94, 0.8);
-            display: block;
-        }
-
-        #mode-indicator.ai {
-            background: rgba(59, 130, 246, 0.8);
-            display: block;
-            animation: pulse 2s infinite;
-        }
-
-        @keyframes pulse {
-
-            0%,
-            100% {
-                opacity: 1;
-            }
-
-            50% {
-                opacity: 0.6;
-            }
+            font-weight: 500;
+            display: inline-flex;
+            align-items: center;
+            gap: 6px;
         }
 
         /* AI Chat Panel */
         #ai-panel {
             position: fixed;
-            bottom: 20px;
-            right: 20px;
+            bottom: 30px;
+            right: 30px;
             z-index: 1000;
-        }
-
-        #ai-panel:not(.collapsed) {
-            width: 400px;
+            width: 380px;
+            display: flex;
+            flex-direction: column;
         }
 
         #ai-panel.collapsed {
-            width: 50px !important;
+            width: auto;
+            background: transparent;
+            box-shadow: none;
+            border: none;
+            backdrop-filter: none;
         }
 
         #ai-panel-content {
-            max-height: 500px;
-            background: rgba(0, 0, 0, 0.9);
-            border-radius: 12px;
-            backdrop-filter: blur(10px);
             display: flex;
             flex-direction: column;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            overflow: hidden;
+            height: 500px;
+            transition: height 0.3s ease;
         }
 
         #ai-panel.collapsed #ai-panel-content {
-            display: none !important;
+            height: 0;
+            opacity: 0;
+            pointer-events: none;
         }
 
-        #ai-panel.collapsed #ai-toggle {
-            background: rgba(249, 115, 22, 0.9);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            font-weight: bold;
-            font-size: 20px;
+        #ai-toggle {
+            align-self: flex-end;
+            margin-bottom: 10px;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            background: var(--primary-color);
+            border: none;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            cursor: pointer;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.4);
+            transition: all 0.2s;
+            font-size: 18px;
+        }
+
+        #ai-toggle:hover {
+            transform: scale(1.05);
+            background: var(--primary-hover);
         }
 
         #ai-header {
-            padding: 12px 16px;
-            padding-right: 60px;
-            border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 16px;
+            border-bottom: 1px solid var(--glass-border);
             display: flex;
             justify-content: space-between;
             align-items: center;
         }
 
         #ai-header h3 {
-            color: white;
             font-size: 14px;
             font-weight: 600;
-        }
-
-        #ai-toggle {
-            position: absolute;
-            top: 50%;
-            right: 16px;
-            transform: translateY(-50%);
-            background: rgba(59, 130, 246, 0.3);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 6px;
             color: white;
-            cursor: pointer;
-            font-size: 18px;
-            padding: 6px 10px;
-            transition: all 0.2s;
-            z-index: 1001;
-        }
-
-        #ai-toggle:hover {
-            background: rgba(59, 130, 246, 0.5);
-            transform: translateY(-50%) scale(1.05);
+            display: flex;
+            align-items: center;
+            gap: 8px;
         }
 
         #ai-messages {
             flex: 1;
             overflow-y: auto;
-            padding: 12px;
-            max-height: 350px;
+            padding: 16px;
+            display: flex;
+            flex-direction: column;
+            gap: 12px;
         }
 
         .ai-message {
-            margin-bottom: 12px;
-            padding: 8px 12px;
-            border-radius: 8px;
+            padding: 10px 14px;
+            border-radius: 12px;
             font-size: 13px;
             line-height: 1.5;
+            max-width: 90%;
+            word-wrap: break-word;
         }
 
         .ai-message.user {
             background: rgba(59, 130, 246, 0.2);
             color: #93c5fd;
-            text-align: right;
+            align-self: flex-end;
+            border-bottom-right-radius: 4px;
         }
 
         .ai-message.assistant {
-            background: rgba(34, 197, 94, 0.2);
-            color: #86efac;
+            background: rgba(255, 255, 255, 0.05);
+            color: #e5e7eb;
+            align-self: flex-start;
+            border-bottom-left-radius: 4px;
         }
 
         .ai-message.system {
-            background: rgba(156, 163, 175, 0.2);
-            color: #d1d5db;
+            background: transparent;
+            color: var(--text-secondary);
             font-size: 11px;
             text-align: center;
+            align-self: center;
+            padding: 4px 8px;
+            border: 1px solid var(--glass-border);
+            border-radius: 20px;
         }
 
         .ai-message.error {
-            background: rgba(239, 68, 68, 0.2);
+            background: rgba(239, 68, 68, 0.1);
             color: #fca5a5;
+            border: 1px solid rgba(239, 68, 68, 0.2);
         }
 
         #ai-input-container {
-            padding: 12px;
-            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            padding: 16px;
+            border-top: 1px solid var(--glass-border);
             display: flex;
-            gap: 8px;
-        }
-
-        .mode-btn {
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 4px;
-            color: rgba(255, 255, 255, 0.7);
-            cursor: pointer;
-            transition: all 0.2s ease;
-        }
-
-        .mode-btn:hover {
-            background: rgba(255, 255, 255, 0.2);
-            color: white;
-        }
-
-        .mode-btn.active {
-            background: rgba(34, 197, 94, 0.8);
-            border-color: rgba(34, 197, 94, 0.8);
-            color: white;
-        }
-
-        #ai-input {
-            flex: 1;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
-            border-radius: 6px;
-            padding: 8px 12px;
-            color: white;
-            font-size: 13px;
-            outline: none;
-        }
-
-        #ai-input::placeholder {
-            color: rgba(255, 255, 255, 0.4);
-        }
-
-        #ai-input:focus {
-            border-color: rgba(59, 130, 246, 0.5);
-            background: rgba(255, 255, 255, 0.15);
-        }
-
-        #ai-send,
-        #ai-stop {
-            background: rgba(59, 130, 246, 0.8);
-            border: none;
-            border-radius: 6px;
-            padding: 8px 16px;
-            color: white;
-            font-size: 13px;
-            cursor: pointer;
-            transition: background 0.2s;
-        }
-
-        #ai-send:hover {
-            background: rgba(59, 130, 246, 1);
-        }
-
-        #ai-stop {
-            background: rgba(239, 68, 68, 0.8);
-            display: none;
-        }
-
-        #ai-stop:hover {
-            background: rgba(239, 68, 68, 1);
-        }
-
-        #ai-stop.active {
-            display: block;
-        }
-
-        .connected {
-            color: #4ade80;
-        }
-
-        .disconnected {
-            color: #f87171;
-        }
-
-        /* Minimize/Maximize */
-        #ai-panel.minimized #ai-messages,
-        #ai-panel.minimized #ai-input-container {
-            display: none;
-        }
-
-        #ai-panel.minimized {
-            max-height: 50px;
-        }
-
-        #ai-header {
-            flex-shrink: 0;
+            gap: 10px;
         }
 
         /* URL Control Panel */
         #url-control {
             position: fixed;
-            top: 10px;
-            left: 10px;
+            top: 30px;
+            left: 50%;
+            transform: translateX(-50%);
             z-index: 1000;
-        }
-
-        #url-control:not(.collapsed) {
-            max-width: 600px;
-        }
-
-        #url-control-content {
-            background: rgba(0, 0, 0, 0.8);
-            backdrop-filter: blur(10px);
-            padding: 8px;
-            border-radius: 8px;
             display: flex;
-            gap: 6px;
             align-items: center;
+            gap: 8px;
+            padding: 8px;
+            transition: all 0.3s ease;
         }
 
         #url-control.collapsed {
-            width: 40px !important;
-            max-width: 40px !important;
+            left: 30px;
+            transform: none;
+            width: auto;
+            padding: 0;
+            background: transparent;
+            box-shadow: none;
+            backdrop-filter: none;
+            border: none;
         }
 
-        #url-control.collapsed #url-control-content {
-            display: none !important;
-        }
-
-        #url-toggle {
-            position: absolute;
-            left: 0;
-            background: rgba(249, 115, 22, 0.9);
-            border: 2px solid rgba(255, 255, 255, 0.3);
-            border-radius: 8px;
-            padding: 8px 12px;
-            color: white;
-            font-size: 16px;
-            font-weight: bold;
-            cursor: pointer;
-            transition: all 0.2s;
-            min-width: 40px;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
-            z-index: 1001;
-        }
-
-        #url-toggle:hover {
-            background: rgba(249, 115, 22, 1);
-            transform: scale(1.05);
+        #url-control.collapsed #url-toggle {
+            position: static;
+            transform: none;
         }
 
         #url-control-content {
-            margin-left: 52px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            transition: opacity 0.2s;
         }
 
-        #url-control button {
-            background: rgba(59, 130, 246, 0.8);
-            border: none;
-            border-radius: 6px;
-            padding: 8px 12px;
-            color: white;
-            font-size: 14px;
+        #url-control.collapsed #url-control-content {
+            display: none;
+            opacity: 0;
+            pointer-events: none;
+        }
+
+        #url-toggle {
+            width: 36px;
+            height: 36px;
+            border-radius: 8px;
+            background: rgba(255, 255, 255, 0.1);
+            border: 1px solid var(--glass-border);
+            color: var(--text-secondary);
             cursor: pointer;
-            transition: background 0.2s;
-            min-width: 36px;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
         }
 
-        #url-control button:hover:not(:disabled) {
-            background: rgba(59, 130, 246, 1);
+        #url-toggle:hover {
+            background: rgba(255, 255, 255, 0.2);
+            color: white;
         }
 
-        #url-control button:disabled {
-            background: rgba(100, 100, 100, 0.5);
+        .icon-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+            transition: all 0.2s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .icon-btn:hover:not(:disabled) {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        .icon-btn:disabled {
+            opacity: 0.3;
             cursor: not-allowed;
-            opacity: 0.5;
         }
 
-        #btn-back,
-        #btn-forward {
-            font-weight: bold;
+        #url-input-wrapper {
+            position: relative;
+            flex: 1;
+            display: flex;
+            align-items: center;
+            min-width: 400px;
         }
 
         #url-input {
-            flex: 1;
-            background: rgba(255, 255, 255, 0.1);
-            border: 1px solid rgba(255, 255, 255, 0.2);
+            width: 100%;
+            background: rgba(0, 0, 0, 0.2);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
+            padding: 10px 14px;
+            padding-right: 40px;
+            color: white;
+            font-size: 14px;
+            outline: none;
+            transition: all 0.2s;
+        }
+
+        #url-input:focus {
+            background: rgba(0, 0, 0, 0.4);
+            border-color: rgba(255, 255, 255, 0.3);
+            box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.3);
+        }
+
+        .zoom-controls {
+            display: flex;
+            align-items: center;
+            background: rgba(0, 0, 0, 0.2);
             border-radius: 6px;
+            margin-left: 8px;
+            padding: 2px;
+            border: 1px solid var(--glass-border);
+        }
+
+        .zoom-btn {
+            background: transparent;
+            border: none;
+            color: var(--text-secondary);
+            width: 28px;
+            height: 28px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            border-radius: 4px;
+            font-size: 16px;
+        }
+
+        .zoom-btn:hover {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+        }
+
+        #zoom-level {
+            font-size: 11px;
+            color: var(--text-secondary);
+            min-width: 40px;
+            text-align: center;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* Buttons & Inputs */
+        .primary-btn {
+            background: var(--primary-color);
+            border: none;
+            border-radius: 8px;
+            padding: 8px 16px;
+            color: white;
+            font-weight: 500;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .primary-btn:hover {
+            background: var(--primary-hover);
+        }
+
+        .danger-btn {
+            background: rgba(239, 68, 68, 0.8);
+            border: 1px solid rgba(248, 113, 113, 0.3);
+            border-radius: 8px;
+            padding: 8px 16px;
+            color: white;
+            font-weight: 500;
+            font-size: 13px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+
+        .danger-btn:hover {
+            background: rgba(239, 68, 68, 1);
+        }
+
+        input[type="text"] {
+            background: rgba(255, 255, 255, 0.05);
+            border: 1px solid var(--glass-border);
+            border-radius: 8px;
             padding: 8px 12px;
             color: white;
             font-size: 13px;
             outline: none;
-            min-width: 300px;
+            transition: all 0.2s;
         }
 
-        #url-input::placeholder {
-            color: rgba(255, 255, 255, 0.4);
+        input[type="text"]:focus {
+            background: rgba(255, 255, 255, 0.1);
+            border-color: rgba(255, 255, 255, 0.2);
         }
 
-        #url-input:focus {
-            border-color: rgba(59, 130, 246, 0.5);
-            background: rgba(255, 255, 255, 0.15);
+        /* Mode Switcher */
+        .mode-switch {
+            display: flex;
+            background: rgba(0, 0, 0, 0.2);
+            padding: 2px;
+            border-radius: 6px;
+            gap: 2px;
         }
 
-        #btn-go {
-            background: rgba(34, 197, 94, 0.8);
+        .mode-btn {
+            padding: 4px 10px;
+            border-radius: 4px;
+            font-size: 11px;
+            color: var(--text-secondary);
+            background: transparent;
+            border: none;
+            cursor: pointer;
+            transition: all 0.2s;
         }
 
-        #btn-go:hover {
-            background: rgba(34, 197, 94, 1);
+        .mode-btn.active {
+            background: rgba(255, 255, 255, 0.1);
+            color: white;
+            font-weight: 500;
         }
 
-        #btn-go:hover {
-            background: rgba(34, 197, 94, 1);
+        /* Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+
+        ::-webkit-scrollbar-track {
+            background: transparent;
+        }
+
+        ::-webkit-scrollbar-thumb {
+            background: rgba(255, 255, 255, 0.1);
+            border-radius: 3px;
+        }
+
+        ::-webkit-scrollbar-thumb:hover {
+            background: rgba(255, 255, 255, 0.2);
         }
 
         #emergency-stop {
             position: fixed;
-            top: 20px;
+            top: 100px;
             left: 50%;
             transform: translateX(-50%);
-            background: rgba(239, 68, 68, 0.9);
+            background: rgba(220, 38, 38, 0.9);
             color: white;
-            border: 2px solid white;
+            border: 1px solid rgba(255, 255, 255, 0.2);
             padding: 12px 32px;
             border-radius: 50px;
-            font-size: 18px;
-            font-weight: bold;
+            font-size: 16px;
+            font-weight: 600;
             cursor: pointer;
             z-index: 2000;
             display: none;
-            box-shadow: 0 4px 15px rgba(220, 38, 38, 0.5);
+            box-shadow: 0 0 30px rgba(220, 38, 38, 0.4);
             animation: pulse-red 2s infinite;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            backdrop-filter: blur(5px);
-        }
-
-        #emergency-stop:hover {
-            background: rgba(220, 38, 38, 1);
-            transform: translateX(-50%) scale(1.05);
-        }
-
-        #emergency-stop:active {
-            transform: translateX(-50%) scale(0.95);
+            backdrop-filter: blur(10px);
+            letter-spacing: 0.5px;
         }
 
         @keyframes pulse-red {
             0% {
-                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0.7);
+                box-shadow: 0 0 0 0 rgba(220, 38, 38, 0.6);
             }
 
             70% {
-                box-shadow: 0 0 0 10px rgba(239, 68, 68, 0);
+                box-shadow: 0 0 0 15px rgba(220, 38, 38, 0);
             }
 
             100% {
-                box-shadow: 0 0 0 0 rgba(239, 68, 68, 0);
+                box-shadow: 0 0 0 0 rgba(220, 38, 38, 0);
             }
         }
     </style>
 </head>
 
 <body>
-    <canvas id="canvas"></canvas>
-    <div id="status" class="disconnected">🔴 未連接</div>
-    <div id="mode-indicator">👤 人類控制</div>
-
-    <!-- URL Control Panel -->
-    <div id="url-control">
-        <button id="url-toggle" title="收縮/展開">☰</button>
-        <div id="url-control-content">
-            <button id="btn-back" title="上一頁">◀</button>
-            <button id="btn-forward" title="下一頁">▶</button>
-            <input type="text" id="url-input" placeholder="輸入網址後按 Enter (例如: https://www.google.com)" />
-
-
-            <button id="emergency-stop">🛑 強制停止</button>
-
-            <!-- AI Chat Panel -->
-            <div id="ai-panel">
-                <button id="ai-toggle">−</button>
-                <div id="ai-panel-content">
-                    <div id="ai-header">
-                        <h3>🤖 AI 助手</h3>
-                        <div style="display: flex; gap: 4px; margin-top: 8px;">
-                            <button id="mode-computer-use" class="mode-btn active"
-                                style="font-size: 10px; padding: 4px 8px;">Computer Use</button>
-                            <button id="mode-browser-use" class="mode-btn"
-                                style="font-size: 10px; padding: 4px 8px;">Browser Use</button>
-                        </div>
-                    </div>
-                    <div id="ai-messages"></div>
-                    <div id="ai-input-container">
-                        <input type="text" id="ai-input" placeholder="輸入 AI 指令...（例如：搜尋台灣天氣）" />
-                        <button id="ai-send">發送</button>
-                        <button id="ai-stop">停止</button>
-                    </div>
+    <div id="canvas-container"><canvas id="canvas"></canvas></div>
+    <div id="status-bar">
+        <div id="status" class="status-badge glass-panel disconnected">🔴 未連接</div>
+        <div id="mode-indicator" class="status-badge glass-panel" style="display: none;">👤 人類控制</div>
+    </div>
+    < !-- URL Control Panel -->
+        <div id="url-control" class="glass-panel"><button id="url-toggle" title="收縮/展開">☰</button>
+            <div id="url-control-content"><button id="btn-back" class="icon-btn" title="上一頁">◀</button><button
+                    id="btn-forward" class="icon-btn" title="下一頁">▶</button><button id="btn-refresh" class="icon-btn"
+                    title="重新整理">↻</button><button id="btn-home" class="icon-btn" title="首頁">🏠</button>
+                <div id="url-input-wrapper"><input type="text" id="url-input" placeholder="輸入網址..." /></div><button
+                    id="btn-go" class="primary-btn">前往</button>
+                <div class="zoom-controls"><button id="btn-zoom-out" class="zoom-btn" title="縮小 (Alt+滾輪)">−</button>
+                    <div id="zoom-level">100%</div><button id="btn-zoom-in" class="zoom-btn"
+                        title="放大 (Alt+滾輪)">+</button><button id="btn-zoom-reset" class="zoom-btn" title="重置">⟲</button>
                 </div>
             </div>
-
-            <script>
-                const canvas = document.getElementById('canvas');
+        </div><button id="emergency-stop">🛑 強制停止</button>
+        < !-- AI Chat Panel -->
+            <div id="ai-panel" class="glass-panel"><button id="ai-toggle" title="收縮/展開">🤖</button>
+                <div id="ai-panel-content">
+                    <div id="ai-header">
+                        <h3>AI 助手</h3>
+                        <div class="mode-switch"><button id="mode-computer-use" class="mode-btn active">Computer
+                                Use</button><button id="mode-browser-use" class="mode-btn">Browser Use</button></div>
+                    </div>
+                    <div id="ai-messages"></div>
+                    <div id="ai-input-container"><input type="text" id="ai-input"
+                            placeholder="輸入指令... (例如: 搜尋天氣)" /><button id="ai-send"
+                            class="primary-btn">發送</button><button id="ai-stop" class="danger-btn">停止</button></div>
+                </div>
+            </div>
+            <script>const canvas = document.getElementById('canvas');
+                const canvasContainer = document.getElementById('canvas-container');
                 const ctx = canvas.getContext('2d');
                 const statusEl = document.getElementById('status');
                 const modeIndicator = document.getElementById('mode-indicator');
@@ -507,29 +549,50 @@
                 const urlInput = document.getElementById('url-input');
                 const btnBack = document.getElementById('btn-back');
                 const btnForward = document.getElementById('btn-forward');
+                const btnRefresh = document.getElementById('btn-refresh');
+                const btnHome = document.getElementById('btn-home');
+                const btnGo = document.getElementById('btn-go');
                 const urlToggle = document.getElementById('url-toggle');
                 const urlControl = document.getElementById('url-control');
                 const emergencyStopBtn = document.getElementById('emergency-stop');
+
+                // Zoom controls
+                const btnZoomIn = document.getElementById('btn-zoom-in');
+                const btnZoomOut = document.getElementById('btn-zoom-out');
+                const btnZoomReset = document.getElementById('btn-zoom-reset');
+                const zoomLevelEl = document.getElementById('zoom-level');
 
                 let ws = null;
                 let currentUrl = '';
                 let currentMode = 'idle';
                 let aiRunning = false;
                 let browserUseRunning = false;
-                let aiMode = 'computer-use'; // 'computer-use' or 'browser-use'
+                let aiMode = 'computer-use';
                 let isEditingUrl = false;
+
+                // Zoom & Pan state
+                let scale = 1;
+                let panX = 0;
+                let panY = 0;
+                let isPanning = false;
+                let startPanX = 0;
+                let startPanY = 0;
+                let panSpacePressed = false;
 
                 // 連接 WebSocket
                 function connect() {
                     const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
                     const host = window.location.host || 'localhost:8000';
+
                     ws = new WebSocket(`${protocol}//${host}/ws/screenshot`);
 
                     ws.onopen = () => {
                         console.log('✅ WebSocket 已連接');
                         statusEl.textContent = '🟢 已連接';
                         statusEl.className = 'connected';
-                    };
+                    }
+
+                        ;
 
                     ws.onclose = () => {
                         console.log('❌ WebSocket 已斷線');
@@ -538,47 +601,54 @@
 
                         // 3 秒後自動重連
                         setTimeout(connect, 3000);
-                    };
+                    }
+
+                        ;
 
                     ws.onerror = (error) => {
                         console.error('WebSocket 錯誤:', error);
-                    };
+                    }
+
+                        ;
 
                     ws.onmessage = (event) => {
                         const data = JSON.parse(event.data);
                         handleWebSocketMessage(data);
-                    };
+                    }
+
+                        ;
                 }
 
                 // 處理 WebSocket 訊息
                 function handleWebSocketMessage(data) {
                     switch (data.type) {
-                        case 'screenshot':
-                            updateCanvas(data);
+                        case 'screenshot': updateCanvas(data);
                             break;
 
-                        case 'ai_status':
-                            handleAIStatus(data);
+                        case 'ai_status': handleAIStatus(data);
                             break;
 
-                        case 'ai_message':
-                            addAIMessage(data.message, 'assistant');
+                        case 'ai_message': addAIMessage(data.message, 'assistant');
                             break;
 
-                        case 'ai_action':
-                            addAIMessage(`🎬 執行動作: ${data.action} (第 ${data.iteration} 次)`, 'system');
+                        case 'ai_action': addAIMessage(`🎬 執行動作: $ {
+                            data.action
+                        }
+
+                        (第 $ {
+                                data.iteration
+                            }
+
+                            次)`, 'system');
                             break;
 
-                        case 'browser_use_status':
-                            handleBrowserUseStatus(data);
+                        case 'browser_use_status': handleBrowserUseStatus(data);
                             break;
 
-                        case 'browser_use_message':
-                            addAIMessage(data.message, data.status === 'error' ? 'error' : 'assistant');
+                        case 'browser_use_message': addAIMessage(data.message, data.status === 'error' ? 'error' : 'assistant');
                             break;
 
-                        case 'state':
-                            currentMode = data.mode;
+                        case 'state': currentMode = data.mode;
                             aiRunning = data.ai_running;
                             browserUseRunning = data.browser_use_running;
                             updateModeIndicator();
@@ -589,6 +659,7 @@
                 // 更新 Canvas
                 function updateCanvas(data) {
                     const img = new Image();
+
                     img.onload = () => {
                         canvas.width = data.width;
                         canvas.height = data.height;
@@ -597,6 +668,7 @@
 
                         if (data.url) {
                             currentUrl = data.url;
+
                             // 只在用戶沒有編輯時更新 URL 輸入框
                             if (!isEditingUrl) {
                                 urlInput.value = data.url;
@@ -605,31 +677,39 @@
 
                         currentMode = data.mode;
                         updateModeIndicator();
-                    };
+                    }
+
+                        ;
                     img.src = 'data:image/png;base64,' + data.image;
                 }
 
                 // 更新模式指示器
                 function updateModeIndicator() {
+                    // Update mode buttons
+                    document.getElementById('mode-computer-use').classList.toggle('active', aiMode === 'computer-use');
+                    document.getElementById('mode-browser-use').classList.toggle('active', aiMode === 'browser-use');
+
                     if (currentMode === 'ai' || aiRunning) {
                         modeIndicator.textContent = '🤖 Computer Use 控制中';
-                        modeIndicator.className = 'ai';
+                        modeIndicator.className = 'status-badge glass-panel ai';
+                        modeIndicator.style.display = 'flex';
                         canvas.classList.add('ai-mode');
                     } else if (currentMode === 'browser-use' || browserUseRunning) {
                         modeIndicator.textContent = '🌐 Browser Use 控制中';
-                        modeIndicator.className = 'ai';
+                        modeIndicator.className = 'status-badge glass-panel ai';
+                        modeIndicator.style.display = 'flex';
                         canvas.classList.add('ai-mode');
                     } else if (currentMode === 'human') {
                         modeIndicator.textContent = '👤 人類控制';
-                        modeIndicator.className = 'human';
+                        modeIndicator.className = 'status-badge glass-panel human';
+                        modeIndicator.style.display = 'flex';
                         canvas.classList.remove('ai-mode');
+                        aiToggle.textContent = '🤖';
                     } else {
                         modeIndicator.style.display = 'none';
                         canvas.classList.remove('ai-mode');
                     }
                 }
-
-
 
                 // 處理 AI 狀態
                 function handleAIStatus(data) {
@@ -638,14 +718,22 @@
                         aiSend.style.display = 'none';
                         aiStop.classList.add('active');
                         emergencyStopBtn.style.display = 'block';
-                        addAIMessage(`🚀 開始執行: ${data.task}`, 'system');
-                    } else if (data.status === 'stopped') {
+
+                        addAIMessage(`🚀 開始執行: $ {
+                            data.task
+                        }
+
+                        `, 'system');
+                    }
+
+                    else if (data.status === 'stopped') {
                         aiRunning = false;
                         aiSend.style.display = 'block';
                         aiStop.classList.remove('active');
                         emergencyStopBtn.style.display = 'none';
                         addAIMessage('⏹ AI 已停止', 'system');
                     }
+
                     updateModeIndicator();
                 }
 
@@ -655,21 +743,34 @@
                         aiSend.style.display = 'none';
                         aiStop.classList.add('active');
                         emergencyStopBtn.style.display = 'block';
-                        addAIMessage(`🚀 Browser-use 開始執行: ${data.task}`, 'system');
-                    } else if (data.status === 'stopped') {
+
+                        addAIMessage(`🚀 Browser-use 開始執行: $ {
+                            data.task
+                        }
+
+                        `, 'system');
+                    }
+
+                    else if (data.status === 'stopped') {
                         browserUseRunning = false;
                         aiSend.style.display = 'block';
                         aiStop.classList.remove('active');
                         emergencyStopBtn.style.display = 'none';
                         addAIMessage('⏹ Browser-use 已停止', 'system');
                     }
+
                     updateModeIndicator();
                 }
 
                 // 添加 AI 訊息
                 function addAIMessage(message, type = 'assistant') {
                     const msgDiv = document.createElement('div');
-                    msgDiv.className = `ai-message ${type}`;
+
+                    msgDiv.className = `ai-message $ {
+                    type
+                }
+
+                `;
                     msgDiv.textContent = message;
                     aiMessages.appendChild(msgDiv);
                     aiMessages.scrollTop = aiMessages.scrollHeight;
@@ -689,7 +790,9 @@
                             type: 'browser_use_start',
                             task: task
                         }));
-                    } else {
+                    }
+
+                    else {
                         ws.send(JSON.stringify({
                             type: 'ai_start',
                             task: task
@@ -707,7 +810,9 @@
                         ws.send(JSON.stringify({
                             type: 'browser_use_stop'
                         }));
-                    } else {
+                    }
+
+                    else {
                         ws.send(JSON.stringify({
                             type: 'ai_stop'
                         }));
@@ -717,54 +822,106 @@
                 // 發送操作到後端
                 function sendAction(type, data) {
                     if (!ws || ws.readyState !== WebSocket.OPEN) return;
-                    ws.send(JSON.stringify({ type, ...data }));
+
+                    ws.send(JSON.stringify({
+                        type, ...data
+                    }));
                 }
 
-                // 滑鼠點擊
-                canvas.addEventListener('click', (e) => {
-                    if (aiRunning || browserUseRunning) return; // AI 控制時禁用
+                // Zoom & Pan Implementation
+                function updateTransform() {
+                    canvas.style.transform = `translate(${panX}px, ${panY}px) scale(${scale})`;
+                    zoomLevelEl.textContent = `${Math.round(scale * 100)}%`;
+                }
 
-                    const rect = canvas.getBoundingClientRect();
-                    const imgAspect = canvas.width / canvas.height;
-                    const viewAspect = rect.width / rect.height;
+                function zoom(delta, centerX, centerY) {
+                    const newScale = Math.min(Math.max(0.1, scale + delta), 5);
+                    if (newScale === scale) return;
 
-                    let displayWidth, displayHeight, offsetX, offsetY;
+                    const scaleRatio = newScale / scale;
 
-                    if (viewAspect > imgAspect) {
-                        displayHeight = rect.height;
-                        displayWidth = rect.height * imgAspect;
-                        offsetX = (rect.width - displayWidth) / 2;
-                        offsetY = 0;
-                    } else {
-                        displayWidth = rect.width;
-                        displayHeight = rect.width / imgAspect;
-                        offsetX = 0;
-                        offsetY = (rect.height - displayHeight) / 2;
+                    // Allow zooming towards mouse position if provided, else center
+                    if (centerX !== undefined && centerY !== undefined) {
+                        panX = centerX - (centerX - panX) * scaleRatio;
+                        panY = centerY - (centerY - panY) * scaleRatio;
                     }
 
-                    const clickX = e.clientX - rect.left - offsetX;
-                    const clickY = e.clientY - rect.top - offsetY;
+                    scale = newScale;
+                    updateTransform();
+                }
 
-                    if (clickX < 0 || clickX > displayWidth || clickY < 0 || clickY > displayHeight) {
-                        return;
+                canvasContainer.addEventListener('wheel', (e) => {
+                    if (e.altKey) {
+                        e.preventDefault();
+                        const rect = canvasContainer.getBoundingClientRect();
+                        const clientX = e.clientX - rect.left; // x relative to container
+                        const clientY = e.clientY - rect.top; // y relative to container
+
+                        // We want the point under mouse to stay stationary relative to screen
+                        // Current point in canvas space: (clientX - panX) / scale
+                        // New point: (clientX - newPanX) / newScale
+                        // equate: (clientX - panX) / scale = (clientX - newPanX) / newScale
+
+                        const delta = -e.deltaY * 0.001;
+                        zoom(delta * 2, clientX - canvasContainer.offsetWidth / 2, clientY - canvasContainer.offsetHeight / 2);
                     }
 
-                    const x = Math.round((clickX / displayWidth) * canvas.width);
-                    const y = Math.round((clickY / displayHeight) * canvas.height);
+                    else if (aiRunning) {
+                        // AI running, do nothing or prevent default
+                        // If not scrolling locally, maybe send scroll to remote?
+                        // For now disable scroll when AI running to match previous behavior
+                    }
 
-                    console.log(`點擊: (${x}, ${y})`);
-                    sendAction('click', { x, y });
+                    else {
+                        e.preventDefault();
+
+                        sendAction('scroll', {
+                            deltaY: e.deltaY
+                        });
+                    }
+                }
+
+                    , {
+                        passive: false
+                    });
+
+                // Panning logic
+                canvasContainer.addEventListener('pointerdown', (e) => {
+                    if (panSpacePressed || e.button === 1) {
+                        // Space held or Middle click
+                        isPanning = true;
+                        startPanX = e.clientX - panX;
+                        startPanY = e.clientY - panY;
+                        canvasContainer.style.cursor = 'grabbing';
+                        e.preventDefault();
+                    }
                 });
 
-                // 鍵盤事件
+                window.addEventListener('pointermove', (e) => {
+                    if (isPanning) {
+                        panX = e.clientX - startPanX;
+                        panY = e.clientY - startPanY;
+                        updateTransform();
+                    }
+                });
+
+                window.addEventListener('pointerup', () => {
+                    if (isPanning) {
+                        isPanning = false;
+                        canvasContainer.style.cursor = 'default';
+                    }
+                });
+
                 document.addEventListener('keydown', (e) => {
-                    // 如果焦點在輸入框，不攔截
+                    if (e.code === 'Space' && document.activeElement !== aiInput && document.activeElement !== urlInput) {
+                        panSpacePressed = true;
+                        canvasContainer.style.cursor = 'grab';
+                    }
+
                     if (document.activeElement === aiInput || document.activeElement === urlInput) return;
 
-                    // 允許 F5 和 F12
                     if (e.key === 'F5' || e.key === 'F12') return;
 
-                    // AI 控制時禁用
                     if (aiRunning) {
                         e.preventDefault();
                         return;
@@ -780,47 +937,98 @@
                     });
                 });
 
-                // 滾輪滾動
-                canvas.addEventListener('wheel', (e) => {
-                    if (aiRunning) return; // AI 控制時禁用
+                document.addEventListener('keyup', (e) => {
+                    if (e.code === 'Space') {
+                        panSpacePressed = false;
+                        if (!isPanning) canvasContainer.style.cursor = 'default';
+                    }
+                });
 
-                    e.preventDefault();
-                    sendAction('scroll', { deltaY: e.deltaY });
-                }, { passive: false });
+                // Updated coordinates for Click
+                canvas.addEventListener('click', (e) => {
+                    if (aiRunning || browserUseRunning) return;
+                    if (isPanning) return; // Don't click if we just panned
 
-                // AI 輸入事件
+                    const rect = canvas.getBoundingClientRect();
+                    const x = (e.clientX - rect.left) / rect.width * canvas.width;
+                    const y = (e.clientY - rect.top) / rect.height * canvas.height;
+
+                    if (x >= 0 && x <= canvas.width && y >= 0 && y <= canvas.height) {
+                        console.log(`點擊: ($ {
+                                Math.round(x)
+                            }
+
+                            , $ {
+                                Math.round(y)
+                            })`);
+
+                        sendAction('click', {
+                            x: Math.round(x), y: Math.round(y)
+                        });
+                    }
+                });
+
+                // UI Button Listeners
+                btnZoomIn.addEventListener('click', () => zoom(0.1));
+                btnZoomOut.addEventListener('click', () => zoom(-0.1));
+
+                btnZoomReset.addEventListener('click', () => {
+                    scale = 1;
+                    panX = 0;
+                    panY = 0;
+                    updateTransform();
+                });
+
+                btnRefresh.addEventListener('click', () => {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+                    ws.send(JSON.stringify({
+                        type: 'refresh'
+                    }));
+                });
+
+                btnHome.addEventListener('click', () => {
+                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
+
+                    ws.send(JSON.stringify({
+                        type: 'navigate', url: 'https://www.google.com'
+                    }));
+                });
+
+                // existing listeners
                 aiSend.addEventListener('click', sendAICommand);
                 aiStop.addEventListener('click', stopAI);
+
                 aiInput.addEventListener('keypress', (e) => {
                     if (e.key === 'Enter') sendAICommand();
                 });
 
-                // AI 模式切換按鈕事件
                 document.getElementById('mode-computer-use').addEventListener('click', () => {
                     aiMode = 'computer-use';
-                    document.getElementById('mode-computer-use').classList.add('active');
-                    document.getElementById('mode-browser-use').classList.remove('active');
+                    updateModeIndicator();
                 });
 
                 document.getElementById('mode-browser-use').addEventListener('click', () => {
                     aiMode = 'browser-use';
-                    document.getElementById('mode-browser-use').classList.add('active');
-                    document.getElementById('mode-computer-use').classList.remove('active');
+                    updateModeIndicator();
                 });
 
-                // AI 面板收縮/展開
                 aiToggle.addEventListener('click', () => {
                     aiPanel.classList.toggle('collapsed');
-                    aiToggle.textContent = aiPanel.classList.contains('collapsed') ? '▶' : '−';
+                    // aiToggle text content handled in CSS or not needed to change if using icon
                 });
 
-                // URL 控制功能
+                urlToggle.addEventListener('click', () => {
+                    urlControl.classList.toggle('collapsed');
+                    urlToggle.textContent = urlControl.classList.contains('collapsed') ? '☰' : '☰';
+                });
+
                 function navigateToUrl() {
                     const url = urlInput.value.trim();
                     if (!url || !ws || ws.readyState !== WebSocket.OPEN) return;
 
-                    // 自動添加 https:// 如果沒有協議
                     let fullUrl = url;
+
                     if (!url.startsWith('http://') && !url.startsWith('https://')) {
                         fullUrl = 'https://' + url;
                     }
@@ -829,54 +1037,40 @@
                         type: 'navigate',
                         url: fullUrl
                     }));
-
-                    // 移除焦點
                     urlInput.blur();
                 }
 
                 function goBack() {
-                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-                    ws.send(JSON.stringify({ type: 'back' }));
+                    if (ws) ws.send(JSON.stringify({
+                        type: 'back'
+                    }));
                 }
 
                 function goForward() {
-                    if (!ws || ws.readyState !== WebSocket.OPEN) return;
-                    ws.send(JSON.stringify({ type: 'forward' }));
+                    if (ws) ws.send(JSON.stringify({
+                        type: 'forward'
+                    }));
                 }
 
-                // 追蹤 URL 輸入框編輯狀態
-                urlInput.addEventListener('focus', () => {
-                    isEditingUrl = true;
-                });
-                urlInput.addEventListener('blur', () => {
-                    isEditingUrl = false;
-                });
+                urlInput.addEventListener('focus', () => isEditingUrl = true);
+                urlInput.addEventListener('blur', () => isEditingUrl = false);
+
                 urlInput.addEventListener('keypress', (e) => {
-                    if (e.key === 'Enter') {
-                        navigateToUrl();
-                    }
+                    if (e.key === 'Enter') navigateToUrl();
                 });
                 btnBack.addEventListener('click', goBack);
                 btnForward.addEventListener('click', goForward);
+                btnGo.addEventListener('click', navigateToUrl);
 
-                // URL 控制面板收縮/展開
-                urlToggle.addEventListener('click', () => {
-                    urlControl.classList.toggle('collapsed');
-                    urlToggle.textContent = urlControl.classList.contains('collapsed') ? '▶' : '☰';
-                });
-
-                // 強制停止按鈕
                 emergencyStopBtn.addEventListener('click', () => {
                     console.log("🛑 用戶點擊強制停止");
                     stopAI();
                 });
 
-                // 啟動連接
+                // Start
                 connect();
-
-                // 自動聚焦 Canvas
-                canvas.focus();
-                canvas.setAttribute('tabindex', '0');
+                // canvas element doesn't need focus for global keys, keeping focus on container if needed
+                window.addEventListener('resize', updateTransform);
             </script>
 </body>
 
