@@ -129,6 +129,35 @@ class ConnectionManager:
 manager = ConnectionManager()
 
 
+
+# Wrapper classes for Azure OpenAI markdown cleaning
+class CleaningCompletions:
+    def __init__(self, original_completions):
+        self._original = original_completions
+
+    async def create(self, *args, **kwargs):
+        response = await self._original.create(*args, **kwargs)
+        try:
+            if response.choices and response.choices[0].message.content:
+                content = response.choices[0].message.content
+                # Strip markdown code blocks if present to ensure valid JSON for browser-use
+                if "```" in content:
+                    cleaned_content = content.replace("```json", "").replace("```", "").strip()
+                    response.choices[0].message.content = cleaned_content
+        except Exception as e:
+            print(f"⚠️ Failed to clean markdown from response: {e}")
+        return response
+
+class AsyncAzureOpenAIWrapper:
+    def __init__(self, original_client):
+        self._original = original_client
+        self.chat = type('Chat', (), {})()
+        self.chat.completions = CleaningCompletions(self._original.chat.completions)
+    
+    def __getattr__(self, name):
+        return getattr(self._original, name)
+
+
 def find_free_port() -> int:
     """Find a free port for the debugging interface."""
     with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
@@ -506,13 +535,6 @@ async def run_browser_use_task_background(task: str):
         # Import browser-use components
         from browser_use import Agent, ChatAzureOpenAI
         
-        # Broadcast start message
-        await manager.broadcast({
-            "type": "browser_use_status",
-            "status": "starting",
-            "task": task
-        })
-        
         # Initialize LLM with Browser Use Azure OpenAI configuration
         llm = ChatAzureOpenAI(
             model='gpt-4o',
@@ -523,6 +545,16 @@ async def run_browser_use_task_background(task: str):
             temperature=0.1,
             dont_force_structured_output=True,
         )
+        
+        # Wrap the client to fix Markdown JSON issues (especially for Linux environments)
+        try:
+            # Force initialization of the client
+            original_client = llm.get_client()
+            # Replace with our wrapper
+            llm.client = AsyncAzureOpenAIWrapper(original_client)
+            print("✅ Applied Markdown JSON fix wrapper to Azure client")
+        except Exception as e:
+            print(f"⚠️ Failed to apply fix wrapper: {e}")
         
         # Create agent with our existing browser session
         agent = Agent(
