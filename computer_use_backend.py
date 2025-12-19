@@ -542,7 +542,7 @@ async def run_browser_use_task_background(task: str):
             azure_endpoint=BROWSER_USE_AZURE_ENDPOINT,
             api_key=BROWSER_USE_AZURE_API_KEY,
             api_version="2024-12-01-preview",
-            temperature=0.1,
+            temperature=0.6,
             dont_force_structured_output=True,
         )
         
